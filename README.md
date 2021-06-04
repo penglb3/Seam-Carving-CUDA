@@ -1,0 +1,2 @@
+# Seam-Carving-CUDA
+
