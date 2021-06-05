@@ -1,0 +1,39 @@
+{
+    "version": "2.0.0",
+    // See https://go.microsoft.com/fwlink/?LinkId=733558
+    // for the documentation about the tasks.json format
+    "tasks": [
+        {
+            "type": "cppbuild",
+            "label": "C/C++: NVCC Build",
+            "command": "nvcc",
+            "args": [
+                "${file}",
+                "-g", "-G",
+                "-I", "D:\\opencv\\build\\include",
+                "-I", "D:\\opencv\\build\\include\\opencv2",
+                "-L", "D:\\opencv\\build\\x64\\vc16\\lib\\Release",
+                "-l", "opencv_core452",
+                "-l", "opencv_imgproc452",
+                "-l", "opencv_imgcodecs452",
+                "-l", "opencv_video452",
+                "-l", "opencv_ml452",
+                "-l", "opencv_highgui452",
+                "-l", "opencv_objdetect452",
+                "-l", "opencv_flann452",
+                "-l", "opencv_imgcodecs452",
+                "-l", "opencv_photo452",
+                "-l", "opencv_videoio452",
+                "-o", "${fileDirname}\\${fileBasenameNoExtension}.exe"
+            ],
+            "options": {
+                "cwd": "${fileDirname}"
+            },
+            "problemMatcher": [
+                "$msCompile"
+            ],
+            "group": "build",
+            "detail": "编译器: nvcc.exe"
+        }
+    ]
+  }
