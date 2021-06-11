@@ -24,7 +24,7 @@ int main(int argc, char** argv)
 	auto start = std::chrono::high_resolution_clock::now();
 	// Set how much to reduce width or/and height by and set image.
 	int reduceWidth = 300;
-	int reduceHeight = 0;
+	int reduceHeight = 300;
 	string imageName = "../images/Tension.jpg";
 	Mat image = imread(imageName, IMREAD_COLOR);
 	if (image.empty()) {
@@ -37,30 +37,30 @@ int main(int argc, char** argv)
 	imshow("Original", image);
 
     Mat (*createEnergyImg)(Mat &) = CUDA::createEnergyImg;
-    Mat (*createEnergyMap)(Mat&, eSeamDirection) = CUDA::createEnergyMap;
-    vector<int> (*findSeam)(Mat&, eSeamDirection) = CUDA::findSeam;
-    void (*removeSeam)(Mat&, vector<int>, eSeamDirection) = CUDA::removeSeam;
+    Mat (*createEnergyMap)(Mat&) = CUDA::createEnergyMap;
+    vector<int> (*findSeam)(Mat&) = CUDA::findSeam;
+    void (*removeSeam)(Mat&, vector<int>) = CUDA::removeSeam;
 
 	// Vertical seam, reduces width
 	for (int i = 0; i < reduceWidth; i++) {
 		Mat energy = createEnergyImg(image);
-		Mat energyMap = createEnergyMap(energy, VERTICAL);
-		vector<int> seam = findSeam(energyMap, VERTICAL);
-		removeSeam(image, seam, VERTICAL);
+		Mat energyMap = createEnergyMap(energy);
+		vector<int> seam = findSeam(energyMap);
+		removeSeam(image, seam);
 	}
-
+	transpose(image, image);
 	// Horizontal seam, reduces height
 	for (int j = 0; j < reduceHeight; j++) {
 		Mat energy = createEnergyImg(image);
-		Mat energyMap = createEnergyMap(energy, HORIZONTAL);
-		vector<int> seam = findSeam(energyMap, HORIZONTAL);
-		removeSeam(image, seam, HORIZONTAL);
+		Mat energyMap = createEnergyMap(energy);
+		vector<int> seam = findSeam(energyMap);
+		removeSeam(image, seam);
 	}
-
+	transpose(image, image);
 	imshow("Result", image);
 	auto end = std::chrono::high_resolution_clock::now();
 	float totalTime = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-	cout << "Sequential on CPU" << endl;
+	cout << ">>>>> Running <<<<<" << endl;
 	cout << "Image name: " << imageName << endl;
 	cout << "Input dimension " << imageSize.first << " x " << imageSize.second << endl;
 	cout << "Output dimension " << image.cols << " x " << image.rows << endl << endl;

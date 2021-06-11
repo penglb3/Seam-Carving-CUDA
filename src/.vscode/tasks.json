@@ -17,7 +17,7 @@
                 "-l", "opencv_imgcodecs452",
                 "-l", "opencv_highgui452",
                 "-l", "opencv_photo452",
-                "-o", "${fileBasenameNoExtension}.exe"
+                "-o", "seam_carve.exe"
             ],
             "options": {
                 "cwd": "${fileDirname}"

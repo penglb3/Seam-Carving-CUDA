@@ -47,10 +47,10 @@ static void HandleError( cudaError_t err, const char *file, int line ) {
 * Kernel function headers.
 **************************************************************/
 __global__ void warm_up_gpu();
-__global__ void cudaEnergyMap(unsigned char* energy, unsigned char* energyMap, unsigned char* prevEnergy, int rowSize, int colSize, eSeamDirection seamDirection);
-__global__ void cudaEnergyMapLarge(unsigned char* energy, unsigned char* energyMap, unsigned char* prevEnergy, int rowSize, int colSize, int current, eSeamDirection seamDirection);
+__global__ void cudaEnergyMap(unsigned char* energy, unsigned char* energyMap, unsigned char* prevEnergy, int rowSize, int colSize);
+__global__ void cudaEnergyMapLarge(unsigned char* energy, unsigned char* energyMap, unsigned char* prevEnergy, int rowSize, int colSize, int current);
 __global__ void cudaReduction(unsigned char* row, float* mins, int* minsIndices, int size, int blockSize, int next);
-__global__ void cudaRemoveSeam(unsigned char* image, int* seam, int rowSize, int colSize, int imageStep, eSeamDirection seamDirection);
+__global__ void cudaRemoveSeam(unsigned char* image, int* seam, int rowSize, int colSize, int imageStep);
 
 /**************************************************************
 * Wrappers and utilities.
@@ -70,7 +70,7 @@ void warmUpGPU() {
 	warm_up_gpu << <1, 1024 >> > ();
 }
 
-void getEnergyMap(Mat& h_energy, Mat& h_energyMap, int rowSize, int colSize, eSeamDirection seamDirection) {
+void getEnergyMap(Mat& h_energy, Mat& h_energyMap, int rowSize, int colSize) {
 	Mat h_prevEnergy;
 	unsigned char* d_energy;
 	unsigned char* d_energyMap;
@@ -82,48 +82,25 @@ void getEnergyMap(Mat& h_energy, Mat& h_energyMap, int rowSize, int colSize, eSe
 	cudaMemcpy(d_energy, h_energy.ptr(), size * sizeof(float), cudaMemcpyHostToDevice);
 	cudaMemcpy(d_energyMap, h_energyMap.ptr(), size * sizeof(float), cudaMemcpyHostToDevice);
 
-	if (seamDirection == VERTICAL) {
-		// Start from first row. Copy first row of energyMap to be used in device
-		h_prevEnergy = Mat(1, colSize, CV_32F, float(0));
-		h_energy.row(0).copyTo(h_prevEnergy.row(0));
+	// Start from first row. Copy first row of energyMap to be used in device
+	h_prevEnergy = Mat(1, colSize, CV_32F, float(0));
+	h_energy.row(0).copyTo(h_prevEnergy.row(0));
 
-		cudaMalloc(&d_prevEnergy, colSize * sizeof(float));
-		cudaMemcpy(d_prevEnergy, h_prevEnergy.ptr(), colSize * sizeof(float), cudaMemcpyHostToDevice);
+	cudaMalloc(&d_prevEnergy, colSize * sizeof(float));
+	cudaMemcpy(d_prevEnergy, h_prevEnergy.ptr(), colSize * sizeof(float), cudaMemcpyHostToDevice);
 
-		int blockSize = min(colSize, MAX_THREADS);
-		int gridSize = ((colSize - 1) / MAX_THREADS) + 1;
+	int blockSize = min(colSize, MAX_THREADS);
+	int gridSize = ((colSize - 1) / MAX_THREADS) + 1;
 
-		if (gridSize == 1) {
-			cudaEnergyMap << <gridSize, blockSize >> > (d_energy, d_energyMap, d_prevEnergy, rowSize, colSize, VERTICAL);
-		}
-		else {
-			for (int i = 1; i < rowSize; i++) {
-				cudaEnergyMapLarge << <gridSize, blockSize >> > (d_energy, d_energyMap, d_prevEnergy, rowSize, colSize, i, VERTICAL);
-			}
-		}
+	if (gridSize == 1) {
+		cudaEnergyMap << <gridSize, blockSize >> > (d_energy, d_energyMap, d_prevEnergy, rowSize, colSize);
 	}
 	else {
-		// Horizontal Seam, reduces height
-		// Start from first row. Copy first row of energyMap to be used in device
-		h_prevEnergy = Mat(rowSize, 1, CV_32F, float(0));
-		h_energy.col(0).copyTo(h_prevEnergy.col(0));
-
-		cudaMalloc(&d_prevEnergy, rowSize * sizeof(float));
-		cudaMemcpy(d_prevEnergy, h_prevEnergy.ptr(), rowSize * sizeof(float), cudaMemcpyHostToDevice);
-
-		int blockSize = min(rowSize, MAX_THREADS);
-		int gridSize = ((rowSize - 1) / MAX_THREADS) + 1;
-
-		if (gridSize == 1) {
-			cudaEnergyMap << <gridSize, blockSize >> > (d_energy, d_energyMap, d_prevEnergy, rowSize, colSize, HORIZONTAL);
-
-		}
-		else {
-			for (int i = 1; i < colSize; i++) {
-				cudaEnergyMapLarge << <gridSize, blockSize >> > (d_energy, d_energyMap, d_prevEnergy, rowSize, colSize, i, HORIZONTAL);
-			}
+		for (int i = 1; i < rowSize; i++) {
+			cudaEnergyMapLarge << <gridSize, blockSize >> > (d_energy, d_energyMap, d_prevEnergy, rowSize, colSize, i);
 		}
 	}
+
 
 	cudaMemcpy(h_energyMap.ptr(), d_energyMap, size * sizeof(float), cudaMemcpyDeviceToHost);
 	cudaFree(d_energy);
@@ -132,7 +109,7 @@ void getEnergyMap(Mat& h_energy, Mat& h_energyMap, int rowSize, int colSize, eSe
 }
 
 
-int getMinCumulativeEnergy(Mat& h_energyMap, int rowSize, int colSize, eSeamDirection seamDirection) {
+int getMinCumulativeEnergy(Mat& h_energyMap, int rowSize, int colSize) {
 	// Require block size to be a multiple of 2 for parallel reduction
 	// Sequential addressing ensures bank conflict free
 	int blockSize;
@@ -140,26 +117,14 @@ int getMinCumulativeEnergy(Mat& h_energyMap, int rowSize, int colSize, eSeamDire
 	int lastSize;
 	int sharedSize;
 	Mat h_last;
-	if (seamDirection == VERTICAL) {
-		blockSize = min(nextPowerof2(colSize / 2), MAX_THREADS);
-		gridSize = (nextPowerof2(colSize / 2) - 1) / MAX_THREADS + 1;
-		sharedSize = blockSize * 2 * (sizeof(float) + sizeof(int));
-		lastSize = colSize;
-		// Copy last row of energyMap to be used in device
-		h_last = Mat(1, colSize, CV_32F, float(0));
-		h_energyMap.row(rowSize - 1).copyTo(h_last.row(0));
-	}
-	else {
-		// Horizontal Seam, reduces height
-		blockSize = min(nextPowerof2(rowSize / 2), MAX_THREADS);
-		gridSize = (nextPowerof2(rowSize / 2) - 1) / MAX_THREADS + 1;
-		sharedSize = blockSize * 2 * (sizeof(float) + sizeof(int));
-		lastSize = rowSize;
-		// Copy last row of energyMap to be used in device
-		h_last = Mat(rowSize, 1, CV_32F, float(0));
-		h_energyMap.col(colSize - 1).copyTo(h_last.col(0));
-	}
-	
+
+	blockSize = min(nextPowerof2(colSize / 2), MAX_THREADS);
+	gridSize = (nextPowerof2(colSize / 2) - 1) / MAX_THREADS + 1;
+	sharedSize = blockSize * 2 * (sizeof(float) + sizeof(int));
+	lastSize = colSize;
+	// Copy last row of energyMap to be used in device
+	h_last = Mat(1, colSize, CV_32F, float(0));
+	h_energyMap.row(rowSize - 1).copyTo(h_last.row(0));
 
 	// Allocate memory for host and device variables
 	float* h_mins = new float[gridSize];
@@ -195,7 +160,7 @@ int getMinCumulativeEnergy(Mat& h_energyMap, int rowSize, int colSize, eSeamDire
 }
 
 namespace CUDA{
-	void removeSeam(Mat& h_image, vector<int> h_seam, eSeamDirection seamDirection) {
+	void removeSeam(Mat& h_image, vector<int> h_seam) {
 		// dummy 1x1x3 to maintain matrix size;
 		Mat h_output;
 		unsigned char* d_image;
@@ -215,14 +180,11 @@ namespace CUDA{
 		cudaMemcpy(d_image, h_image.ptr(), size, cudaMemcpyHostToDevice);
 		cudaMemcpy(d_seam, &h_seam[0], h_seam.size() * sizeof(int), cudaMemcpyHostToDevice);
 
-		cudaRemoveSeam << <gridDim, blockDim >> > (d_image, d_seam, rowSize, colSize, h_image.step, seamDirection);
+		cudaRemoveSeam << <gridDim, blockDim >> > (d_image, d_seam, rowSize, colSize, h_image.step);
 
 		cudaMemcpy(h_image.ptr(), d_image, size, cudaMemcpyDeviceToHost);
 
-		if (seamDirection == VERTICAL)
-			h_image = h_image.colRange(0, h_image.cols - 1);
-		else
-			h_image = h_image.rowRange(0, h_image.rows - 1);
+		h_image = h_image.colRange(0, h_image.cols - 1);
 
 		cudaFree(d_image);
 		cudaFree(d_seam);
@@ -242,95 +204,52 @@ __global__ void warm_up_gpu() {
 	ib += ia + tid;
 }
 
-__global__ void cudaEnergyMap(unsigned char* energy, unsigned char* energyMap, unsigned char* prevEnergy, int rowSize, int colSize, eSeamDirection seamDirection) {
+__global__ void cudaEnergyMap(unsigned char* energy, unsigned char* energyMap, unsigned char* prevEnergy, int rowSize, int colSize) {
 	int idx;
 	float topCenter, topLeft, topRight, minEnergy, cumEnergy;
 
-	if (seamDirection == VERTICAL) {
-		idx = blockIdx.x * MAX_THREADS + threadIdx.x;
+	idx = blockIdx.x * MAX_THREADS + threadIdx.x;
 
-		for (int current = 1; current < rowSize; current++) {
-			if (idx < colSize) {
-				// Find min value of prev row neighbors and add to the current idx's cumEnergy
-				topCenter = ((float*)prevEnergy)[idx];
-				topLeft = (idx > 0) ? ((float*)prevEnergy)[idx - 1] : ((float*)prevEnergy)[0];
-				topRight = (idx < colSize - 1) ? ((float*)prevEnergy)[idx + 1] : ((float*)prevEnergy)[colSize - 1];
-				minEnergy = min(topCenter, min(topLeft, topRight));
-				cumEnergy = minEnergy + ((float*)energy)[current * colSize + idx];
-			}
-			__syncthreads();
-			if (idx < colSize) {
-				//Update cumEnergy in map and prevRow array
-				((float*)prevEnergy)[idx] = cumEnergy;
-				((float*)energyMap)[current * colSize + idx] = cumEnergy;
-			}
-			__syncthreads();
+	for (int current = 1; current < rowSize; current++) {
+		if (idx < colSize) {
+			// Find min value of prev row neighbors and add to the current idx's cumEnergy
+			topCenter = ((float*)prevEnergy)[idx];
+			topLeft = (idx > 0) ? ((float*)prevEnergy)[idx - 1] : ((float*)prevEnergy)[0];
+			topRight = (idx < colSize - 1) ? ((float*)prevEnergy)[idx + 1] : ((float*)prevEnergy)[colSize - 1];
+			minEnergy = min(topCenter, min(topLeft, topRight));
+			cumEnergy = minEnergy + ((float*)energy)[current * colSize + idx];
 		}
-	}
-	else {
-		idx = blockIdx.x * MAX_THREADS + threadIdx.x;
-
-		for (int current = 1; current < colSize; current++) {
-			if (idx < rowSize) {
-				// Find min value of prev row neighbors and add to the current idx's cumEnergy
-				topCenter = ((float*)prevEnergy)[idx];
-				topLeft = (idx > 0) ? ((float*)prevEnergy)[idx - 1] : ((float*)prevEnergy)[0];
-				topRight = (idx < rowSize - 1) ? ((float*)prevEnergy)[idx + 1] : ((float*)prevEnergy)[rowSize - 1];
-				minEnergy = min(topCenter, min(topLeft, topRight));
-				cumEnergy = minEnergy + ((float*)energy)[idx * colSize + current];
-			}
-			__syncthreads();
-			if (idx < rowSize) {
-				//Update cumEnergy in map and prevRow array
-				((float*)prevEnergy)[idx] = cumEnergy;
-				((float*)energyMap)[idx * colSize + current] = cumEnergy;
-			}
-			__syncthreads();
-
+		__syncthreads();
+		if (idx < colSize) {
+			//Update cumEnergy in map and prevRow array
+			((float*)prevEnergy)[idx] = cumEnergy;
+			((float*)energyMap)[current * colSize + idx] = cumEnergy;
 		}
+		__syncthreads();
 	}
 
 }
 
-__global__ void cudaEnergyMapLarge(unsigned char* energy, unsigned char* energyMap, unsigned char* prevEnergy, int rowSize, int colSize, int current, eSeamDirection seamDirection) {
+__global__ void cudaEnergyMapLarge(unsigned char* energy, unsigned char* energyMap, unsigned char* prevEnergy, int rowSize, int colSize, int current) {
 	int idx;
 	float topCenter, topLeft, topRight, minEnergy, cumEnergy;
 
-	if (seamDirection == VERTICAL) {
-		idx = blockIdx.x * MAX_THREADS + threadIdx.x;
+	idx = blockIdx.x * MAX_THREADS + threadIdx.x;
 
-		if (idx >= colSize) {
-			return;
-		}
-		// Find min value of prev row neighbors and add to the current idx's cumEnergy
-		topCenter = ((float*)prevEnergy)[idx];
-		topLeft = (idx > 0) ? ((float*)prevEnergy)[idx - 1] : ((float*)prevEnergy)[0];
-		topRight = (idx < colSize - 1) ? ((float*)prevEnergy)[idx + 1] : ((float*)prevEnergy)[colSize - 1];
-		minEnergy = min(topCenter, min(topLeft, topRight));
-		cumEnergy = minEnergy + ((float*)energy)[current * colSize + idx];
-		__syncthreads();
-		//Update cumEnergy in map and prevRow array
-		((float*)prevEnergy)[idx] = cumEnergy;
-		((float*)energyMap)[current * colSize + idx] = cumEnergy;
+	if (idx >= colSize) {
+		return;
 	}
-	else {
-		idx = blockIdx.x * MAX_THREADS + threadIdx.x;
+	// Find min value of prev row neighbors and add to the current idx's cumEnergy
+	topCenter = ((float*)prevEnergy)[idx];
+	topLeft = (idx > 0) ? ((float*)prevEnergy)[idx - 1] : ((float*)prevEnergy)[0];
+	topRight = (idx < colSize - 1) ? ((float*)prevEnergy)[idx + 1] : ((float*)prevEnergy)[colSize - 1];
+	minEnergy = min(topCenter, min(topLeft, topRight));
+	cumEnergy = minEnergy + ((float*)energy)[current * colSize + idx];
+	__syncthreads();
+	//Update cumEnergy in map and prevRow array
+	((float*)prevEnergy)[idx] = cumEnergy;
+	((float*)energyMap)[current * colSize + idx] = cumEnergy;
 
-		if (idx >= rowSize) {
-			return;
-		}
-
-		// Find min value of prev row neighbors and add to the current idx's cumEnergy
-		topCenter = ((float*)prevEnergy)[idx];
-		topLeft = (idx > 0) ? ((float*)prevEnergy)[idx - 1] : ((float*)prevEnergy)[0];
-		topRight = (idx < rowSize - 1) ? ((float*)prevEnergy)[idx + 1] : ((float*)prevEnergy)[rowSize - 1];
-		minEnergy = min(topCenter, min(topLeft, topRight));
-		cumEnergy = minEnergy + ((float*)energy)[idx * colSize + current];
-		__syncthreads();
-		//Update cumEnergy in map and prevRow array
-		((float*)prevEnergy)[idx] = cumEnergy;
-		((float*)energyMap)[idx * colSize + current] = cumEnergy;
-	}
 
 }
 
@@ -367,7 +286,7 @@ __global__ void cudaReduction(unsigned char* last, float* mins, int* minsIndices
 	}
 }
 
-__global__ void cudaRemoveSeam(unsigned char*__restrict__ image, int* seam, int rowSize, int colSize, int imageStep, eSeamDirection seamDirection) {
+__global__ void cudaRemoveSeam(unsigned char*__restrict__ image, int* seam, int rowSize, int colSize, int imageStep) {
 	int col = blockIdx.x * blockDim.x + threadIdx.x;
 	int row = blockIdx.y * blockDim.y + threadIdx.y;
 	// Location of colored pixel in input
@@ -375,29 +294,15 @@ __global__ void cudaRemoveSeam(unsigned char*__restrict__ image, int* seam, int 
 	float temp[3] = { 0 };
 
 	if (col < colSize && row < rowSize) {
-		if (seamDirection == VERTICAL) {
-			if (col >= seam[row] && col != colSize - 1) {
-				temp[0] = image[tidImage + 3];
-				temp[1] = image[tidImage + 4];
-				temp[2] = image[tidImage + 5];
-			}
-			else {
-				temp[0] = image[tidImage];
-				temp[1] = image[tidImage + 1];
-				temp[2] = image[tidImage + 2];
-			}
+		if (col >= seam[row] && col != colSize - 1) {
+			temp[0] = image[tidImage + 3];
+			temp[1] = image[tidImage + 4];
+			temp[2] = image[tidImage + 5];
 		}
 		else {
-			if (row >= seam[col] && row < rowSize - 1) {
-				temp[0] = image[tidImage + imageStep];
-				temp[1] = image[tidImage + imageStep + 1];
-				temp[2] = image[tidImage + imageStep + 2];
-			}
-			else {
-				temp[0] = image[tidImage];
-				temp[1] = image[tidImage + 1];
-				temp[2] = image[tidImage + 2];
-			}
+			temp[0] = image[tidImage];
+			temp[1] = image[tidImage + 1];
+			temp[2] = image[tidImage + 2];
 		}
 	}
 	

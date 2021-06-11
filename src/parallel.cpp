@@ -38,7 +38,7 @@ namespace CUDA{
 		return energy;
 	}
 
-	Mat createEnergyMap(Mat& energy, eSeamDirection seamDirection) {
+	Mat createEnergyMap(Mat& energy) {
 		auto start = chrono::high_resolution_clock::now();
 		int rowSize = energy.rows;
 		int colSize = energy.cols;
@@ -46,14 +46,14 @@ namespace CUDA{
 		Mat energyMap = Mat(rowSize, colSize, CV_32F, float(0));
 
 		// Call cuda function to get energy map
-		getEnergyMap(energy, energyMap, rowSize, colSize, seamDirection);
+		getEnergyMap(energy, energyMap, rowSize, colSize);
 
 		auto end = chrono::high_resolution_clock::now();
 		cumEnergyTime += chrono::duration_cast<chrono::milliseconds>(end - start).count();
 		return energyMap;
 	}
 
-	vector<int> findSeam(Mat& energyMap, eSeamDirection seamDirection) {
+	vector<int> findSeam(Mat& energyMap) {
 		auto start = chrono::high_resolution_clock::now();
 		int rowSize = energyMap.rows;
 		int colSize = energyMap.cols;
@@ -64,67 +64,35 @@ namespace CUDA{
 		Point minLoc;
 
 		
-		if (seamDirection == VERTICAL) {
-			// Call kernel for parallel reduction to find min cumulative energy
-			seam.resize(rowSize);
+		// Call kernel for parallel reduction to find min cumulative energy
+		seam.resize(rowSize);
 
-			curLoc = getMinCumulativeEnergy(energyMap, rowSize, colSize, VERTICAL);
-			//cuda::minMaxLoc(energyMap.row(rowSize - 1), &minVal, NULL, &minLoc, NULL);
-			//curLoc = minLoc.x;
+		curLoc = getMinCumulativeEnergy(energyMap, rowSize, colSize);
+		//cuda::minMaxLoc(energyMap.row(rowSize - 1), &minVal, NULL, &minLoc, NULL);
+		//curLoc = minLoc.x;
 
-			seam[rowSize - 1] = curLoc;
+		seam[rowSize - 1] = curLoc;
 
-			// Look at top neighbors to find next minimum cumulative energy
-			for (int row = rowSize - 1; row > 0; row--) {
-				topCenter = energyMap.at<float>(row - 1, curLoc);
-				topLeft = energyMap.at<float>(row - 1, max(curLoc - 1, 0));
-				topRight = energyMap.at<float>(row - 1, min(curLoc + 1, colSize - 1));
+		// Look at top neighbors to find next minimum cumulative energy
+		for (int row = rowSize - 1; row > 0; row--) {
+			topCenter = energyMap.at<float>(row - 1, curLoc);
+			topLeft = energyMap.at<float>(row - 1, max(curLoc - 1, 0));
+			topRight = energyMap.at<float>(row - 1, min(curLoc + 1, colSize - 1));
 
-				// find next col idx
-				if (min(topLeft, topCenter) > topRight) {
-					// topRight smallest
-					curLoc += 1;
-				}
-				else if (min(topRight, topCenter) > topLeft) {
-					// topLeft smallest
-					curLoc -= 1;
-				}
-				// if topCenter smallest, curCol remain;
-				// update seam
-				seam[row - 1] = curLoc;
+			// find next col idx
+			if (min(topLeft, topCenter) > topRight) {
+				// topRight smallest
+				curLoc += 1;
 			}
-		}
-		else {
-			// Horizontal seam, reduces height
-			// Call kernel for parallel reduction to find min cumulative energy
-			seam.resize(colSize);
-			
-			curLoc = getMinCumulativeEnergy(energyMap, rowSize, colSize, HORIZONTAL);
-			//cuda::minMaxLoc(energyMap.col(colSize - 1), &minVal, NULL, &minLoc, NULL);
-			//curLoc = minLoc.y;
-			
-			seam[colSize - 1] = curLoc;
-
-			// Look at top neighbors to find next minimum cumulative energy
-			for (int col = colSize - 1; col > 0; col--) {
-				topCenter = energyMap.at<float>(curLoc, col - 1);
-				topLeft = energyMap.at<float>(max(curLoc - 1, 0), col - 1);
-				topRight = energyMap.at<float>(min(curLoc + 1, rowSize - 1), col - 1);
-
-				// find next col idx
-				if (min(topLeft, topCenter) > topRight) {
-					// topRight smallest
-					curLoc += 1;
-				}
-				else if (min(topRight, topCenter) > topLeft) {
-					// topLeft smallest
-					curLoc -= 1;
-				}
-				// if topCenter smallest, curCol remain;
-				// update seam
-				seam[col - 1] = curLoc;
+			else if (min(topRight, topCenter) > topLeft) {
+				// topLeft smallest
+				curLoc -= 1;
 			}
+			// if topCenter smallest, curCol remain;
+			// update seam
+			seam[row - 1] = curLoc;
 		}
+		
 		
 		auto end = chrono::high_resolution_clock::now();
 		findSeamTime += chrono::duration_cast<chrono::milliseconds>(end - start).count();
