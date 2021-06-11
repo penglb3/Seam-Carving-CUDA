@@ -1,6 +1,6 @@
 {
     "files.associations": {
-        "MAIN.CPP": "cuda-cpp",
+        "*.CPP": "cuda-cpp",
         "cstdio": "cpp",
         "string": "cpp",
         "algorithm": "cpp",
@@ -65,7 +65,8 @@
         "xstring": "cpp",
         "xtr1common": "cpp",
         "xtree": "cpp",
-        "xutility": "cpp"
+        "xutility": "cpp",
+        "cstdarg": "cpp"
     },
     "python.pythonPath": "C:\\Users\\PLB\\.conda\\envs\\Pytorch\\python.exe"
 }

@@ -4,8 +4,7 @@
             "name": "win",
             "includePath": [
                 "${workspaceFolder}/**",
-                "D:\\opencv\\build\\include",
-                "D:\\opencv\\build\\include\\opencv2"              
+                "D:\\opencv\\build\\include"        
             ],
             "defines": [],
             "compilerPath": "",

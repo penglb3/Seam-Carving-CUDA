@@ -8,23 +8,16 @@
             "label": "C/C++: NVCC Build",
             "command": "nvcc",
             "args": [
-                "${file}",
+                "main.cpp","sequential.cpp","parallel.cpp","kernel.cu",
                 "-g", "-G",
                 "-I", "D:\\opencv\\build\\include",
-                "-I", "D:\\opencv\\build\\include\\opencv2",
                 "-L", "D:\\opencv\\build\\x64\\vc16\\lib\\Release",
                 "-l", "opencv_core452",
                 "-l", "opencv_imgproc452",
                 "-l", "opencv_imgcodecs452",
-                "-l", "opencv_video452",
-                "-l", "opencv_ml452",
                 "-l", "opencv_highgui452",
-                "-l", "opencv_objdetect452",
-                "-l", "opencv_flann452",
-                "-l", "opencv_imgcodecs452",
                 "-l", "opencv_photo452",
-                "-l", "opencv_videoio452",
-                "-o", "${fileDirname}\\${fileBasenameNoExtension}.exe"
+                "-o", "${fileBasenameNoExtension}.exe"
             ],
             "options": {
                 "cwd": "${fileDirname}"
