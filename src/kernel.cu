@@ -47,9 +47,10 @@ static void HandleError( cudaError_t err, const char *file, int line ) {
 * Kernel function headers.
 **************************************************************/
 __global__ void warm_up_gpu();
-__global__ void cudaEnergyMap(unsigned char* energy, unsigned char* energyMap, unsigned char* prevEnergy, int rowSize, int colSize);
-__global__ void cudaEnergyMapLarge(unsigned char* energy, unsigned char* energyMap, unsigned char* prevEnergy, int rowSize, int colSize, int current);
-__global__ void cudaReduction(unsigned char* row, float* mins, int* minsIndices, int size, int blockSize, int next);
+__global__ void energyKernel(const unsigned char* __restrict__ image, float* output, int rows, int cols);
+__global__ void cudaEnergyMap(const unsigned char* __restrict__ energy, unsigned char* energyMap, unsigned char* prevEnergy, int rowSize, int colSize);
+__global__ void cudaEnergyMapLarge(const unsigned char* __restrict__ energy, unsigned char* energyMap, unsigned char* prevEnergy, int rowSize, int colSize, int current);
+__global__ void cudaReduction(const unsigned char* __restrict__ row, float* mins, int* minsIndices, int size, int blockSize, int next);
 __global__ void cudaRemoveSeam(unsigned char* image, int* seam, int rowSize, int colSize, int imageStep);
 
 /**************************************************************
@@ -66,9 +67,7 @@ int nextPowerof2(int n) {
     return n;
 }
 
-void warmUpGPU() {
-    warm_up_gpu << <1, 1024 >> > ();
-}
+
 
 void getEnergyMap(Mat& h_energy, Mat& h_energyMap, int rowSize, int colSize) {
     Mat h_prevEnergy;
@@ -77,35 +76,35 @@ void getEnergyMap(Mat& h_energy, Mat& h_energyMap, int rowSize, int colSize) {
     unsigned char* d_prevEnergy;
     int size = rowSize * colSize;
 
-    cudaMalloc(&d_energy, size * sizeof(float));
-    cudaMalloc(&d_energyMap, size * sizeof(float));
-    cudaMemcpy(d_energy, h_energy.ptr(), size * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_energyMap, h_energyMap.ptr(), size * sizeof(float), cudaMemcpyHostToDevice);
+    HANDLE_ERROR( cudaMalloc(&d_energy, size * sizeof(float)) );
+    HANDLE_ERROR( cudaMalloc(&d_energyMap, size * sizeof(float)) );
+    HANDLE_ERROR( cudaMemcpy(d_energy, h_energy.ptr(), size * sizeof(float), cudaMemcpyHostToDevice) );
+    HANDLE_ERROR( cudaMemcpy(d_energyMap, h_energyMap.ptr(), size * sizeof(float), cudaMemcpyHostToDevice) );
 
     // Start from first row. Copy first row of energyMap to be used in device
     h_prevEnergy = Mat(1, colSize, CV_32F, float(0));
     h_energy.row(0).copyTo(h_prevEnergy.row(0));
 
-    cudaMalloc(&d_prevEnergy, colSize * sizeof(float));
-    cudaMemcpy(d_prevEnergy, h_prevEnergy.ptr(), colSize * sizeof(float), cudaMemcpyHostToDevice);
+    HANDLE_ERROR( cudaMalloc(&d_prevEnergy, colSize * sizeof(float)) );
+    HANDLE_ERROR( cudaMemcpy(d_prevEnergy, h_prevEnergy.ptr(), colSize * sizeof(float), cudaMemcpyHostToDevice) );
 
     int blockSize = min(colSize, MAX_THREADS);
     int gridSize = ((colSize - 1) / MAX_THREADS) + 1;
 
     if (gridSize == 1) {
-        cudaEnergyMap << <gridSize, blockSize >> > (d_energy, d_energyMap, d_prevEnergy, rowSize, colSize);
+        cudaEnergyMap <<<gridSize, blockSize >>> (d_energy, d_energyMap, d_prevEnergy, rowSize, colSize);
     }
     else {
         for (int i = 1; i < rowSize; i++) {
-            cudaEnergyMapLarge << <gridSize, blockSize >> > (d_energy, d_energyMap, d_prevEnergy, rowSize, colSize, i);
+            cudaEnergyMapLarge <<<gridSize, blockSize >>> (d_energy, d_energyMap, d_prevEnergy, rowSize, colSize, i);
         }
     }
 
 
-    cudaMemcpy(h_energyMap.ptr(), d_energyMap, size * sizeof(float), cudaMemcpyDeviceToHost);
-    cudaFree(d_energy);
-    cudaFree(d_energyMap);
-    cudaFree(d_prevEnergy);
+    HANDLE_ERROR( cudaMemcpy(h_energyMap.ptr(), d_energyMap, size * sizeof(float), cudaMemcpyDeviceToHost) );
+    HANDLE_ERROR( cudaFree(d_energy) );
+    HANDLE_ERROR( cudaFree(d_energyMap) );
+    HANDLE_ERROR( cudaFree(d_prevEnergy) );
 }
 
 
@@ -133,15 +132,15 @@ int getMinCumulativeEnergy(Mat& h_energyMap, int rowSize, int colSize) {
     float* d_mins;
     int* d_minIndices;
 
-    cudaMalloc(&d_mins, gridSize * sizeof(float));
-    cudaMalloc(&d_minIndices, gridSize * sizeof(int));
-    cudaMalloc(&d_last, lastSize * sizeof(float));
-    cudaMemcpy(d_last, h_last.ptr(), lastSize * sizeof(float), cudaMemcpyHostToDevice);
+    HANDLE_ERROR( cudaMalloc(&d_mins, gridSize * sizeof(float)) );
+    HANDLE_ERROR( cudaMalloc(&d_minIndices, gridSize * sizeof(int)) );
+    HANDLE_ERROR( cudaMalloc(&d_last, lastSize * sizeof(float)) );
+    HANDLE_ERROR( cudaMemcpy(d_last, h_last.ptr(), lastSize * sizeof(float), cudaMemcpyHostToDevice) );
 
     cudaReduction << <gridSize, blockSize, sharedSize >> > (d_last, d_mins, d_minIndices, lastSize, blockSize, blockSize * gridSize);
 
-    cudaMemcpy(h_mins, d_mins, gridSize * sizeof(float), cudaMemcpyDeviceToHost);
-    cudaMemcpy(h_minIndices, d_minIndices, gridSize * sizeof(int), cudaMemcpyDeviceToHost);
+    HANDLE_ERROR( cudaMemcpy(h_mins, d_mins, gridSize * sizeof(float), cudaMemcpyDeviceToHost) );
+    HANDLE_ERROR( cudaMemcpy(h_minIndices, d_minIndices, gridSize * sizeof(int), cudaMemcpyDeviceToHost) );
 
     // Compare mins of different blocks
     pair<float, int> min = {h_mins[0], h_minIndices[0]};
@@ -153,18 +152,49 @@ int getMinCumulativeEnergy(Mat& h_energyMap, int rowSize, int colSize) {
     }
     free(h_mins);
     free(h_minIndices);
-    cudaFree(d_last);
-    cudaFree(d_mins);
-    cudaFree(d_minIndices);
+    HANDLE_ERROR( cudaFree(d_last) );
+    HANDLE_ERROR( cudaFree(d_mins) );
+    HANDLE_ERROR( cudaFree(d_minIndices) );
     return min.second;
 }
 
 namespace CUDA{
+    void warmUpGPU() {
+        warm_up_gpu << <1, 1024 >> > ();
+    }
+
+    Mat createEnergyImg(Mat &image) {
+        int rows = image.rows, cols = image.cols;
+        Mat h_output(rows, cols, CV_32F, 0.), tmp;
+        cvtColor(image, tmp, COLOR_BGR2GRAY);
+        unsigned char* d_image;
+        float* d_output;
+        int size = tmp.rows * tmp.step;
+
+        dim3 blockDim(32, 32);
+        dim3 gridDim((tmp.cols + blockDim.x - 1) / blockDim.x, (tmp.rows + blockDim.y - 1) / blockDim.y);
+        auto start = chrono::high_resolution_clock::now();
+
+        HANDLE_ERROR( cudaMalloc(&d_image, size) );
+        HANDLE_ERROR( cudaMalloc(&d_output, h_output.rows*h_output.step) );
+        HANDLE_ERROR( cudaMemcpy(d_image, tmp.ptr(), size, cudaMemcpyHostToDevice) );
+
+        //Kernel Call
+        energyKernel <<< gridDim, blockDim >>> (d_image, d_output, rows, cols);
+        
+        HANDLE_ERROR( cudaMemcpy(h_output.ptr(), d_output, h_output.rows*h_output.step, cudaMemcpyDeviceToHost) );
+        HANDLE_ERROR( cudaFree(d_image) );
+        HANDLE_ERROR( cudaFree(d_output) );
+
+        auto end = chrono::high_resolution_clock::now();
+        sobelEnergyTime += chrono::duration_cast<chrono::milliseconds>(end - start).count();
+        return h_output;
+    }
+
     void removeSeam(Mat& h_image, vector<int> h_seam) {
         // dummy 1x1x3 to maintain matrix size;
         Mat h_output;
         unsigned char* d_image;
-        static int i = 0;
         int* d_seam;
 
         int rowSize = h_image.rows;
@@ -174,20 +204,20 @@ namespace CUDA{
         dim3 gridDim((h_image.cols + blockDim.x - 1) / blockDim.x, (h_image.rows + blockDim.y - 1) / blockDim.y);
         auto startRemove = chrono::high_resolution_clock::now();
 
-        cudaMalloc(&d_image, size);
-        cudaMalloc(&d_seam, h_seam.size() * sizeof(int));
+        HANDLE_ERROR( cudaMalloc(&d_image, size) );
+        HANDLE_ERROR( cudaMalloc(&d_seam, h_seam.size() * sizeof(int)) );
 
-        cudaMemcpy(d_image, h_image.ptr(), size, cudaMemcpyHostToDevice);
-        cudaMemcpy(d_seam, &h_seam[0], h_seam.size() * sizeof(int), cudaMemcpyHostToDevice);
+        HANDLE_ERROR( cudaMemcpy(d_image, h_image.ptr(), size, cudaMemcpyHostToDevice) );
+        HANDLE_ERROR( cudaMemcpy(d_seam, &h_seam[0], h_seam.size() * sizeof(int), cudaMemcpyHostToDevice) );
 
         cudaRemoveSeam << <gridDim, blockDim >> > (d_image, d_seam, rowSize, colSize, h_image.step);
 
-        cudaMemcpy(h_image.ptr(), d_image, size, cudaMemcpyDeviceToHost);
+        HANDLE_ERROR( cudaMemcpy(h_image.ptr(), d_image, size, cudaMemcpyDeviceToHost) );
 
         h_image = h_image.colRange(0, h_image.cols - 1);
 
-        cudaFree(d_image);
-        cudaFree(d_seam);
+        HANDLE_ERROR( cudaFree(d_image) );
+        HANDLE_ERROR( cudaFree(d_seam) );
 
         auto endRemove = chrono::high_resolution_clock::now();
         removeSeamTime += chrono::duration_cast<chrono::milliseconds>(endRemove - startRemove).count();
@@ -204,7 +234,18 @@ __global__ void warm_up_gpu() {
     ib += ia + tid;
 }
 
-__global__ void cudaEnergyMap(unsigned char* energy, unsigned char* energyMap, unsigned char* prevEnergy, int rowSize, int colSize) {
+__global__ void energyKernel(const unsigned char* __restrict__ image, float* output, int rows, int cols){
+    int tx = threadIdx.x + blockIdx.x * blockDim.x,
+        ty = threadIdx.y + blockIdx.y * blockDim.y,
+        here = ty*cols+tx;
+    if (tx<cols && ty<rows){
+        float   dy = image[(ty+1>=rows)?here:(cols+here)] - image[(ty==0)?here:(here-cols)],
+                dx = image[(tx+1>=cols)?here:(here+1)] - image[(ty==0)?here:(here-1)];
+        output[here] = (abs(dy)+abs(dx)) / 510.;
+    }
+}
+
+__global__ void cudaEnergyMap(const unsigned char* __restrict__ energy, unsigned char* energyMap, unsigned char* prevEnergy, int rowSize, int colSize) {
     int idx;
     float topCenter, topLeft, topRight, minEnergy, cumEnergy;
 
@@ -230,7 +271,7 @@ __global__ void cudaEnergyMap(unsigned char* energy, unsigned char* energyMap, u
 
 }
 
-__global__ void cudaEnergyMapLarge(unsigned char* energy, unsigned char* energyMap, unsigned char* prevEnergy, int rowSize, int colSize, int current) {
+__global__ void cudaEnergyMapLarge(const unsigned char* __restrict__ energy, unsigned char* energyMap, unsigned char* prevEnergy, int rowSize, int colSize, int current) {
     int idx;
     float topCenter, topLeft, topRight, minEnergy, cumEnergy;
 
@@ -253,7 +294,7 @@ __global__ void cudaEnergyMapLarge(unsigned char* energy, unsigned char* energyM
 
 }
 
-__global__ void cudaReduction(unsigned char* last, float* mins, int* minsIndices, int size, int blockSize, int next) {
+__global__ void cudaReduction(const unsigned char* __restrict__ last, float* mins, int* minsIndices, int size, int blockSize, int next) {
     // Global index
     int idx = blockIdx.x * blockSize + threadIdx.x;
     // Initialize shared memory arrays
@@ -286,7 +327,7 @@ __global__ void cudaReduction(unsigned char* last, float* mins, int* minsIndices
     }
 }
 
-__global__ void cudaRemoveSeam(unsigned char*__restrict__ image, int* seam, int rowSize, int colSize, int imageStep) {
+__global__ void cudaRemoveSeam(unsigned char* image, int* seam, int rowSize, int colSize, int imageStep) {
     int col = blockIdx.x * blockDim.x + threadIdx.x;
     int row = blockIdx.y * blockDim.y + threadIdx.y;
     // Location of colored pixel in input

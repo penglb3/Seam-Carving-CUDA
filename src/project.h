@@ -16,6 +16,7 @@ namespace CPU{
 }
 
 namespace CUDA{
+    void warmUpGPU();
     cv::Mat createEnergyImg(cv::Mat &image);
     cv::Mat createEnergyMap(cv::Mat& energy);
     std::vector<int> findSeam(cv::Mat& energyMap);

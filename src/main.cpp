@@ -23,7 +23,7 @@ int main(int argc, char** argv)
 {    
     // Program parameters
     int width = 0, height = 0, parallel = 1,
-        blockDimX = 32, blockDimY = 32;
+        blockDimX = 32, blockDimY = 32; // WARNING: blockDim parameters are not really applied.
     
     const char* imageName = "../images/Tension.jpg";
     const char* outputName = "../images/output.jpg";
@@ -77,6 +77,8 @@ int main(int argc, char** argv)
         findSeam = CPU::findSeam;
         removeSeam = CPU::removeSeam;
     }
+    else
+        CUDA::warmUpGPU();
 
     auto start = std::chrono::high_resolution_clock::now();
     // Vertical seam

@@ -8,36 +8,6 @@ using namespace std;
 using namespace cv;
 
 namespace CUDA{
-    Mat createEnergyImg(Mat &image) {
-        auto start = chrono::high_resolution_clock::now();
-        Mat grayscale, grad, energy;
-        Mat grad_x, grad_y;
-        Mat abs_grad_x, abs_grad_y;
-        int ddepth = CV_16S;
-        int scale = 1;
-        int delta = 0;
-
-        // Convert image to grayscale
-        cvtColor(image, grayscale, COLOR_BGR2GRAY);
-
-        // Perform sobel operator to get image gradient
-        Sobel(grayscale, grad_x, ddepth, 1, 0, 3, scale, delta, BORDER_DEFAULT);
-        Sobel(grayscale, grad_y, ddepth, 0, 1, 3, scale, delta, BORDER_DEFAULT);
-
-        convertScaleAbs(grad_x, abs_grad_x);
-        convertScaleAbs(grad_y, abs_grad_y);
-
-        addWeighted(abs_grad_x, 0.5, abs_grad_y, 0.5, 0, grad);
-
-        // Convert gradient to double
-        grad.convertTo(energy, CV_32F, 1.0 / 255.0);
-
-        auto end = chrono::high_resolution_clock::now();
-        sobelEnergyTime += chrono::duration_cast<chrono::milliseconds>(end - start).count();
-
-        return energy;
-    }
-
     Mat createEnergyMap(Mat& energy) {
         auto start = chrono::high_resolution_clock::now();
         int rowSize = energy.rows;
@@ -63,13 +33,9 @@ namespace CUDA{
         double minVal;
         Point minLoc;
 
-        
-        // Call kernel for parallel reduction to find min cumulative energy
         seam.resize(rowSize);
 
         curLoc = getMinCumulativeEnergy(energyMap, rowSize, colSize);
-        //cuda::minMaxLoc(energyMap.row(rowSize - 1), &minVal, NULL, &minLoc, NULL);
-        //curLoc = minLoc.x;
 
         seam[rowSize - 1] = curLoc;
 
@@ -92,7 +58,6 @@ namespace CUDA{
             // update seam
             seam[row - 1] = curLoc;
         }
-        
         
         auto end = chrono::high_resolution_clock::now();
         findSeamTime += chrono::duration_cast<chrono::milliseconds>(end - start).count();
