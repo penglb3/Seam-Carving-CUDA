@@ -20,7 +20,7 @@ namespace CUDA{
     cv::Mat createEnergyMap(cv::Mat& energy);
     std::vector<int> findSeam(cv::Mat& energyMap);
     void removeSeam(cv::Mat& image, std::vector<int> seam);
-    void trans(cv::Mat& image);
+    void trans(cv::Mat& image); // TODO
 }
 
 extern float sobelEnergyTime;
