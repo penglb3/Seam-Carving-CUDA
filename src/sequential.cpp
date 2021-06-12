@@ -9,6 +9,10 @@ using namespace std;
 using namespace cv;
 
 namespace CPU{
+	inline void trans(Mat& image){
+		transpose(image, image);
+	}
+
 	Mat createEnergyImg(Mat &image) {
 		auto start = chrono::high_resolution_clock::now();
 		Mat grayscale, grad, energy;
