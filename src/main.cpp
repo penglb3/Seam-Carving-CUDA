@@ -63,13 +63,14 @@ int main(int argc, char** argv)
     cout << "Input dimension " << imageSize.first << " x " << imageSize.second << endl;
     cout << "Output dimension " << image.cols-reduceWidth << " x " << image.rows-reduceHeight << endl << endl;
 
-    imshow("Original", image);
+    // imshow("Original", image);
 
     // Choose the mode: default = CUDA
     Mat (*createEnergyImg)(Mat&) = CUDA::createEnergyImg;
     Mat (*createEnergyMap)(Mat&) = CUDA::createEnergyMap;
     vector<int> (*findSeam)(Mat&) = CUDA::findSeam;
     void (*removeSeam)(Mat&, vector<int>) = CUDA::removeSeam;
+    void (*trans)(Mat&) = CPU::trans;
 
     if (!parallel){
         createEnergyImg = CPU::createEnergyImg;
@@ -88,7 +89,7 @@ int main(int argc, char** argv)
         vector<int> seam = findSeam(energyMap);
         removeSeam(image, seam);
     }
-    transpose(image, image);
+    trans(image);
     // Horizontal seam
     for (int j = 0; j < reduceHeight; j++) {
         Mat energy = createEnergyImg(image);
@@ -96,7 +97,7 @@ int main(int argc, char** argv)
         vector<int> seam = findSeam(energyMap);
         removeSeam(image, seam);
     }
-    transpose(image, image);
+    trans(image);
     auto end = std::chrono::high_resolution_clock::now();
 
     // Report results and statistics.
@@ -112,6 +113,5 @@ int main(int argc, char** argv)
     imwrite(outputName, image);
     waitKey(0);
 
-    system("pause");
     return 0;
 }

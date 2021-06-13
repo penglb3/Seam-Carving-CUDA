@@ -47,6 +47,8 @@ static void HandleError( cudaError_t err, const char *file, int line ) {
 * Kernel function headers.
 **************************************************************/
 __global__ void warm_up_gpu();
+__global__ void transposeKernel(const uchar3* __restrict__ image, uchar3* out, int rows, int cols);
+__global__ void transpose_naive(const uchar3* __restrict__ idata, uchar3* odata, int height, int width);
 __global__ void energyKernel(const unsigned char* __restrict__ image, float* output, int rows, int cols);
 __global__ void cudaEnergyMap(const unsigned char* __restrict__ energy, unsigned char* energyMap, unsigned char* prevEnergy, int rowSize, int colSize);
 __global__ void cudaEnergyMapLarge(const unsigned char* __restrict__ energy, unsigned char* energyMap, unsigned char* prevEnergy, int rowSize, int colSize, int current);
@@ -163,6 +165,29 @@ namespace CUDA{
         warm_up_gpu << <1, 1024 >> > ();
     }
 
+    void trans(Mat& h_image){ 
+        // TODO: Logical bugs exists, no idea where.
+        uchar3* d_image, *d_out;
+        int rowSize = h_image.rows;
+        int colSize = h_image.cols;
+        int size = h_image.rows * h_image.cols * h_image.elemSize();
+        printf("%d,%zd,%d,%zd\n",size, h_image.elemSize(), h_image.channels(), sizeof(uchar3));
+
+        dim3 blockDim(32, 32);
+        dim3 gridDim((h_image.cols + blockDim.x - 1) / blockDim.x, (h_image.rows + blockDim.y - 1) / blockDim.y);
+        HANDLE_ERROR( cudaMalloc((void**)&d_image, size) );
+        HANDLE_ERROR( cudaMalloc((void**)&d_out, size) );
+        HANDLE_ERROR( cudaMemcpy(d_image, h_image.ptr<uchar3>(), size, cudaMemcpyHostToDevice) );
+        
+        transpose_naive<<<gridDim, blockDim>>>(d_image, d_out, rowSize, colSize);
+        Mat h_out = Mat(colSize, rowSize, h_image.type(), {0,0,0});
+        // HANDLE_ERROR( cudaMemcpy(h_image.ptr<uchar3>(), d_out, size, cudaMemcpyDeviceToHost) );
+        HANDLE_ERROR( cudaMemcpy(h_out.ptr<uchar3>(), d_out, size, cudaMemcpyDeviceToHost) );
+        HANDLE_ERROR( cudaFree(d_image));
+        HANDLE_ERROR( cudaFree(d_out));
+        h_image = h_out;
+    }
+
     Mat createEnergyImg(Mat &image) {
         int rows = image.rows, cols = image.cols;
         Mat h_output(rows, cols, CV_32F, 0.), tmp;
@@ -244,6 +269,36 @@ __global__ void energyKernel(const unsigned char* __restrict__ image, float* out
         output[here] = (abs(dy)+abs(dx)) / 510.;
     }
 }
+
+__global__ void transposeKernel(const uchar3* __restrict__ image, uchar3* out, int rows, int cols){
+    __shared__ uchar3 smem[32][32];
+
+    unsigned int ix = blockIdx.x * blockDim.x + threadIdx.x,
+        iy = blockIdx.y * blockDim.y + threadIdx.y;
+    if ((ix<cols) && (iy<rows)){
+        smem[threadIdx.y][threadIdx.x] = image[iy*cols+ix];
+    }
+    __syncthreads();
+    ix = blockIdx.y * blockDim.y + threadIdx.x,
+    iy = blockIdx.x * blockDim.x + threadIdx.y;
+    if ((ix<rows) && (iy<cols)){
+        out[iy*rows+ix] = smem[threadIdx.x][threadIdx.y];
+    }
+}
+
+__global__ void transpose_naive(const uchar3* __restrict__ idata, uchar3* odata, int height, int width)
+{
+   unsigned int xIndex = blockDim.x * blockIdx.x + threadIdx.x;
+   unsigned int yIndex = blockDim.y * blockIdx.y + threadIdx.y;
+   
+   if (xIndex < width && yIndex < height)
+   {
+       unsigned int index_in  = xIndex + width * yIndex;
+       unsigned int index_out = yIndex + height * xIndex;
+       odata[index_out] = idata[index_in]; 
+   }
+}
+
 
 __global__ void cudaEnergyMap(const unsigned char* __restrict__ energy, unsigned char* energyMap, unsigned char* prevEnergy, int rowSize, int colSize) {
     int idx;

@@ -9,7 +9,7 @@ using namespace std;
 using namespace cv;
 
 namespace CPU{
-    inline void trans(Mat& image){
+    void trans(Mat& image){
         transpose(image, image);
     }
 
