@@ -48,12 +48,11 @@ static void HandleError( cudaError_t err, const char *file, int line ) {
 **************************************************************/
 __global__ void warm_up_gpu();
 __global__ void transposeKernel(const uchar3* __restrict__ image, uchar3* out, int rows, int cols);
-__global__ void transpose_naive(const uchar3* __restrict__ idata, uchar3* odata, int height, int width);
 __global__ void energyKernel(const unsigned char* __restrict__ image, float* output, int rows, int cols);
 __global__ void cudaEnergyMap(const unsigned char* __restrict__ energy, unsigned char* energyMap, unsigned char* prevEnergy, int rowSize, int colSize);
 __global__ void cudaEnergyMapLarge(const unsigned char* __restrict__ energy, unsigned char* energyMap, unsigned char* prevEnergy, int rowSize, int colSize, int current);
 __global__ void cudaReduction(const unsigned char* __restrict__ row, float* mins, int* minsIndices, int size, int blockSize, int next);
-__global__ void cudaRemoveSeam(unsigned char* image, int* seam, int rowSize, int colSize, int imageStep);
+__global__ void cudaRemoveSeam(uchar3* image, int* seam, int rowSize, int colSize);
 
 /**************************************************************
 * Wrappers and utilities.
@@ -165,8 +164,7 @@ namespace CUDA{
         warm_up_gpu << <1, 1024 >> > ();
     }
 
-    void trans(Mat& h_image){ 
-        h_image = h_image.clone();
+    void trans(Mat& h_image){
         uchar3* d_image, *d_out;
         int rowSize = h_image.rows;
         int colSize = h_image.cols;
@@ -218,7 +216,7 @@ namespace CUDA{
     void removeSeam(Mat& h_image, vector<int> h_seam) {
         // dummy 1x1x3 to maintain matrix size;
         Mat h_output;
-        unsigned char* d_image;
+        uchar3* d_image;
         int* d_seam;
 
         int rowSize = h_image.rows;
@@ -234,11 +232,11 @@ namespace CUDA{
         HANDLE_ERROR( cudaMemcpy(d_image, h_image.ptr(), size, cudaMemcpyHostToDevice) );
         HANDLE_ERROR( cudaMemcpy(d_seam, &h_seam[0], h_seam.size() * sizeof(int), cudaMemcpyHostToDevice) );
 
-        cudaRemoveSeam << <gridDim, blockDim >> > (d_image, d_seam, rowSize, colSize, h_image.step);
+        cudaRemoveSeam << <gridDim, blockDim >> > (d_image, d_seam, rowSize, colSize);
 
         HANDLE_ERROR( cudaMemcpy(h_image.ptr(), d_image, size, cudaMemcpyDeviceToHost) );
 
-        h_image = h_image.colRange(0, h_image.cols - 1);
+        h_image = h_image.colRange(0, h_image.cols - 1).clone();
 
         HANDLE_ERROR( cudaFree(d_image) );
         HANDLE_ERROR( cudaFree(d_seam) );
@@ -283,19 +281,6 @@ __global__ void transposeKernel(const uchar3* __restrict__ image, uchar3* out, i
     if ((ix<rows) && (iy<cols)){
         out[iy*rows+ix] = smem[threadIdx.x][threadIdx.y];
     }
-}
-
-__global__ void transpose_naive(const uchar3* __restrict__ idata, uchar3* odata, int height, int width)
-{
-   unsigned int xIndex = blockDim.x * blockIdx.x + threadIdx.x;
-   unsigned int yIndex = blockDim.y * blockIdx.y + threadIdx.y;
-   
-   if (xIndex < width && yIndex < height)
-   {
-       unsigned int index_in  = xIndex + width * yIndex;
-       unsigned int index_out = yIndex + height * xIndex;
-       odata[index_out] = idata[index_in]; 
-   }
 }
 
 
@@ -381,30 +366,24 @@ __global__ void cudaReduction(const unsigned char* __restrict__ last, float* min
     }
 }
 
-__global__ void cudaRemoveSeam(unsigned char* image, int* seam, int rowSize, int colSize, int imageStep) {
+__global__ void cudaRemoveSeam (uchar3 * image, int* seam, int rowSize, int colSize) {
     int col = blockIdx.x * blockDim.x + threadIdx.x;
     int row = blockIdx.y * blockDim.y + threadIdx.y;
     // Location of colored pixel in input
-    int tidImage = row * imageStep + (3 * col);
-    float temp[3] = { 0 };
+    int tidImage = row * colSize + col;
+    uchar3 temp;
 
     if (col < colSize && row < rowSize) {
         if (col >= seam[row] && col != colSize - 1) {
-            temp[0] = image[tidImage + 3];
-            temp[1] = image[tidImage + 4];
-            temp[2] = image[tidImage + 5];
+            temp = image[tidImage+1];
         }
         else {
-            temp[0] = image[tidImage];
-            temp[1] = image[tidImage + 1];
-            temp[2] = image[tidImage + 2];
+            temp = image[tidImage];
         }
     }
     
     __syncthreads();
     if (col < colSize && row < rowSize) {
-        image[tidImage] = temp[0];
-        image[tidImage + 1] = temp[1];
-        image[tidImage + 2] = temp[2];
+        image[tidImage] = temp;
     }
 }
