@@ -18,6 +18,7 @@ float sobelEnergyTime = 0;
 float cumEnergyTime = 0;
 float findSeamTime = 0;
 float removeSeamTime = 0;
+float transposeTime = 0;
 
 int main(int argc, char** argv)
 {    
@@ -70,44 +71,52 @@ int main(int argc, char** argv)
     Mat (*createEnergyMap)(Mat&) = CUDA::createEnergyMap;
     vector<int> (*findSeam)(Mat&) = CUDA::findSeam;
     void (*removeSeam)(Mat&, vector<int>) = CUDA::removeSeam;
-    void (*trans)(Mat&) = CPU::trans;
+    void (*trans)(Mat&) = CUDA::trans;
 
     if (!parallel){
         createEnergyImg = CPU::createEnergyImg;
         createEnergyMap = CPU::createEnergyMap;
         findSeam = CPU::findSeam;
         removeSeam = CPU::removeSeam;
+        trans = CPU::trans;
     }
     else
         CUDA::warmUpGPU();
-
+    Mat energy, energyMap;
+    vector<int> seam;
     auto start = std::chrono::high_resolution_clock::now();
     // Vertical seam
     for (int i = 0; i < reduceWidth; i++) {
-        Mat energy = createEnergyImg(image);
-        Mat energyMap = createEnergyMap(energy);
-        vector<int> seam = findSeam(energyMap);
+        energy = createEnergyImg(image);
+        energyMap = createEnergyMap(energy);
+        seam = findSeam(energyMap);
         removeSeam(image, seam);
     }
+    auto startTranspose = std::chrono::high_resolution_clock::now();
     trans(image);
+    auto endTranspose = std::chrono::high_resolution_clock::now();
+    transposeTime += std::chrono::duration_cast<std::chrono::milliseconds>(endTranspose - startTranspose).count();
     // Horizontal seam
     for (int j = 0; j < reduceHeight; j++) {
-        Mat energy = createEnergyImg(image);
-        Mat energyMap = createEnergyMap(energy);
-        vector<int> seam = findSeam(energyMap);
+        energy = createEnergyImg(image);
+        energyMap = createEnergyMap(energy);
+        seam = findSeam(energyMap);
         removeSeam(image, seam);
     }
+    startTranspose = std::chrono::high_resolution_clock::now();
     trans(image);
     auto end = std::chrono::high_resolution_clock::now();
+    transposeTime += std::chrono::duration_cast<std::chrono::milliseconds>(end - startTranspose).count();
+    float totalTime = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
 
     // Report results and statistics.
     imshow("Result", image);
-    float totalTime = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
 
     cout << "Time taken to get energy of each image: " << sobelEnergyTime << "(ms)" << endl;
     cout << "Time taken to get cumulative energy map: " << cumEnergyTime << "(ms)" << endl;
     cout << "Time taken to find seam: " << findSeamTime << "(ms)" << endl;
     cout << "Time taken to remove seam: " << removeSeamTime << "(ms)" << endl;
+    cout << "Time taken to transpose image: " << transposeTime << "(ms)" << endl;
     cout << "Total time: " << totalTime << "(ms)" << endl;
 
     imwrite(outputName, image);

@@ -166,12 +166,11 @@ namespace CUDA{
     }
 
     void trans(Mat& h_image){ 
-        // TODO: Logical bugs exists, no idea where.
+        h_image = h_image.clone();
         uchar3* d_image, *d_out;
         int rowSize = h_image.rows;
         int colSize = h_image.cols;
         int size = h_image.rows * h_image.cols * h_image.elemSize();
-        printf("%d,%zd,%d,%zd\n",size, h_image.elemSize(), h_image.channels(), sizeof(uchar3));
 
         dim3 blockDim(32, 32);
         dim3 gridDim((h_image.cols + blockDim.x - 1) / blockDim.x, (h_image.rows + blockDim.y - 1) / blockDim.y);
@@ -179,8 +178,8 @@ namespace CUDA{
         HANDLE_ERROR( cudaMalloc((void**)&d_out, size) );
         HANDLE_ERROR( cudaMemcpy(d_image, h_image.ptr<uchar3>(), size, cudaMemcpyHostToDevice) );
         
-        transpose_naive<<<gridDim, blockDim>>>(d_image, d_out, rowSize, colSize);
-        Mat h_out = Mat(colSize, rowSize, h_image.type(), {0,0,0});
+        transposeKernel<<<gridDim, blockDim>>>(d_image, d_out, rowSize, colSize);
+        Mat h_out = Mat(colSize, rowSize, h_image.type());
         // HANDLE_ERROR( cudaMemcpy(h_image.ptr<uchar3>(), d_out, size, cudaMemcpyDeviceToHost) );
         HANDLE_ERROR( cudaMemcpy(h_out.ptr<uchar3>(), d_out, size, cudaMemcpyDeviceToHost) );
         HANDLE_ERROR( cudaFree(d_image));

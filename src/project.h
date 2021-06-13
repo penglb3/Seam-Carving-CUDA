@@ -2,6 +2,8 @@
 #define _PROJECT_H_
 
 #include <opencv2/opencv.hpp>
+#include <opencv2/core.hpp>
+#include <opencv2/core/mat.hpp>
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
@@ -21,7 +23,7 @@ namespace CUDA{
     cv::Mat createEnergyMap(cv::Mat& energy);
     std::vector<int> findSeam(cv::Mat& energyMap);
     void removeSeam(cv::Mat& image, std::vector<int> seam);
-    void trans(cv::Mat& image); // TODO
+    void trans(cv::Mat& image);
 }
 
 extern float sobelEnergyTime;
