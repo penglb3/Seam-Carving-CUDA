@@ -27,8 +27,8 @@ int main(int argc, char** argv)
         blockDimX = 32, blockDimY = 32; // WARNING: blockDim parameters are not really applied.
     bool useFloydWarshall = false;
 
-    const char* imageName = "../images/Tension.jpg";
-    const char* outputName = "../images/output.jpg";
+    const char* imageName = "images/Tension.jpg";
+    const char* outputName = "images/output.jpg";
 
     // Get parameters from arguments (if provided)
     char c;
@@ -74,7 +74,7 @@ int main(int argc, char** argv)
     vector<int> (*findSeam)(Mat&) = CUDA::findSeam;
     void (*removeSeam)(Mat&, vector<int>) = CUDA::removeSeam;
     void (*trans)(Mat&) = CUDA::trans;
-    if (useFloydWarshall) findSeam = CUDA::FloydWarshallFindSeam;
+    // if (useFloydWarshall) findSeam = CUDA::FloydWarshallFindSeam;
 
     if (!parallel){
         createEnergyImg = CPU::createEnergyImg;
@@ -82,7 +82,7 @@ int main(int argc, char** argv)
         findSeam = CPU::findSeam;
         removeSeam = CPU::removeSeam;
         trans = CPU::trans;
-        if (useFloydWarshall) findSeam = CPU::FloydWarshallFindSeam;
+        // if (useFloydWarshall) findSeam = CPU::FloydWarshallFindSeam;
     }
     else
         CUDA::warmUpGPU();
