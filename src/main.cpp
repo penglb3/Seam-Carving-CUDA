@@ -46,14 +46,18 @@ int main(int argc, char** argv)
         }
     if (!width && !height) {
         cout << "No resizing needed, exiting." << endl;
+        #ifdef _WIN32
         system("pause");
+        #endif
         return 0;
     }
     // Set up reduction width and height and read image.
     Mat image = imread(imageName, IMREAD_COLOR);
     if (image.empty()) {
         cout << "Invalid image. Please try again." << endl;
+        #ifdef _WIN32
         system("pause");
+        #endif
         return 1;
     }
     pair<int, int> imageSize = { image.cols, image.rows };
@@ -114,7 +118,9 @@ int main(int argc, char** argv)
     float totalTime = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
 
     // Report results and statistics.
+    #ifdef _WIN32
     imshow("Result", image);
+    #endif
 
     cout << "Time taken to get energy of each image: " << sobelEnergyTime << "(ms)" << endl;
     cout << "Time taken to get cumulative energy map: " << cumEnergyTime << "(ms)" << endl;
@@ -124,7 +130,9 @@ int main(int argc, char** argv)
     cout << "Total time: " << totalTime << "(ms)" << endl;
 
     imwrite(outputName, image);
+    #ifdef _WIN32
     waitKey(0);
+    #endif
 
     return 0;
 }
