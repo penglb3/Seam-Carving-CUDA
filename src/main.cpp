@@ -86,7 +86,7 @@ int main(int argc, char** argv)
         findSeam = CPU::findSeam;
         removeSeam = CPU::removeSeam;
         trans = CPU::trans;
-        if (useFordFulkerson) findSeam = CPU::FordFulkersonFindSeam;
+        // if (useFordFulkerson) findSeam = CPU::FordFulkersonFindSeam;
     }
     else
         CUDA::warmUpGPU();
@@ -108,7 +108,7 @@ int main(int argc, char** argv)
     for (int j = 0; j < reduceHeight; j++) {
         energy = createEnergyImg(image);
         if (!useFordFulkerson) energy = createEnergyMap(energy);
-        seam = findSeam(energyMap);
+        seam = findSeam(energy);
         removeSeam(image, seam);
     }
     startTranspose = std::chrono::high_resolution_clock::now();

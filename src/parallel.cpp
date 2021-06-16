@@ -63,4 +63,6 @@ namespace CUDA{
         findSeamTime += chrono::duration_cast<chrono::milliseconds>(end - start).count();
         return seam;
     }
+
+    vector<int> FordFulkersonFindSeam(Mat& energy) {}
 }
