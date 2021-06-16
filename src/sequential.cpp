@@ -15,6 +15,8 @@ constexpr int SCANNED = 2;
 constexpr int IN = 1;
 constexpr int OUT = 0;
 
+constexpr double EPS = 1e-3;
+
 namespace CPU{
     void trans(Mat& image){
         transpose(image, image);
@@ -156,24 +158,20 @@ namespace CPU{
     vector<int> FordFulkersonFindSeam(Mat& energy) {
         int *edge_from, *edge_to;
         double *edge_capacity, *edge_flow;
-        int *neighbor, *direction, *residual, *state;
+        int *neighbor, *direction, *state;
+        double *left;
+        int *edge_memory;
 
         int n = energy.rows;
         int m = energy.cols;
 
         // 0 for source, 1 for sink
         int node_size = 2 + n * (m + 1);
-        neighbor = new int[node_size];
-        direction = new int[node_size];
-        residual = new int[node_size];
-        state = new int[node_size];
-
-        for (int i = 0; i < node_size; i++) {
-            neighbor[i] = 0;
-            direction[i] = 0;
-            residual[i] = 0;
-            state[i] = UNLABELED;
-        }
+        neighbor = new int[node_size]();
+        direction = new int[node_size]();
+        left = new double[node_size]();
+        state = new int[node_size]();
+        edge_memory = new int[node_size]();
 
         int edge_size = 2 * n + 2 * n * m + 2  * (n - 1) * m;
         edge_from = new int[edge_size];
@@ -231,5 +229,64 @@ namespace CPU{
             }
         }
         assert(edge_cnt == edge_size);
+
+        while (true) {
+            // Step1
+            state[0] = UNSCANNED;
+            left[0] = numeric_limits<double>::max() / 2.0;
+
+            // Step2
+            int flag;
+            while (true) {
+                flag = 1;
+                for (int i = 0; i < edge_size; i++) {
+                    if (state[edge_from[i]] == UNSCANNED && state[edge_to[i]] == UNLABELED && (edge_capacity[i] - edge_flow[i]) > EPS ) {
+                        neighbor[edge_to[i]] = edge_from[i];
+                        edge_memory[edge_to[i]] = i;
+                        direction[edge_to[i]] = IN;
+                        left[edge_to[i]] = left[edge_from[i]] < (edge_capacity[i] - edge_flow[i]) ? left[edge_from[i]] : (edge_capacity[i] - edge_flow[i]);
+                        state[edge_from[i]] = SCANNED;
+                        state[edge_to[i]] = UNSCANNED;
+                        flag = 0;
+                    }
+                    if (state[edge_from[i]] == UNLABELED && state[edge_to[i]] == UNSCANNED && edge_flow[i] > 0.0) {
+                        neighbor[edge_from[i]] = edge_to[i];
+                        edge_memory[edge_from[i]] = i;
+                        direction[edge_from[i]] = OUT;
+                        left[edge_from[i]] = left[edge_to[i]] < edge_flow[i] ? left[edge_to[i]] : edge_flow[i];
+                        state[edge_to[i]] = SCANNED;
+                        state[edge_from[i]] = UNSCANNED;
+                        flag = 0;
+                    }
+                }
+                if (state[1] == UNSCANNED || flag) break;
+            }
+            if (flag) break;
+
+            // Step3
+            int x = 2;
+            while (x != 1) {
+                if (direction[x] == IN) {
+                    edge_flow[edge_memory[x]] += left[2];
+                }
+                else if (direction[x] == OUT) {
+                    edge_flow[edge_memory[x]] -= left[2];
+                }
+                x = neighbor[x];
+            }
+
+            memset(state, 0, sizeof(int)*node_size);
+        }
+
+
+        vector<int> seam(n);
+        for (int i = 0; i < edge_size; i++) {
+            if (edge_capacity[i] - edge_flow[i] <= EPS) {
+                int row = (edge_from[i] - 2) / n;
+                int col = (edge_from[i] - 2) % n;
+                seam[row] = col;
+            }
+        }
+        return seam;
     }
 }

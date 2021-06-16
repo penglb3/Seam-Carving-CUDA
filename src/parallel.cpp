@@ -64,5 +64,5 @@ namespace CUDA{
         return seam;
     }
 
-    vector<int> FordFulkersonFindSeam(Mat& energy) {}
+    // vector<int> FordFulkersonFindSeam(Mat& energy) {}
 }

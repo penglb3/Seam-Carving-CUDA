@@ -78,7 +78,7 @@ int main(int argc, char** argv)
     vector<int> (*findSeam)(Mat&) = CUDA::findSeam;
     void (*removeSeam)(Mat&, vector<int>) = CUDA::removeSeam;
     void (*trans)(Mat&) = CUDA::trans;
-    if (useFordFulkerson) findSeam = CUDA::FordFulkersonFindSeam;
+    // if (useFordFulkerson) findSeam = CUDA::FordFulkersonFindSeam;
 
     if (!parallel){
         createEnergyImg = CPU::createEnergyImg;
@@ -86,7 +86,7 @@ int main(int argc, char** argv)
         findSeam = CPU::findSeam;
         removeSeam = CPU::removeSeam;
         trans = CPU::trans;
-        // if (useFordFulkerson) findSeam = CPU::FordFulkersonFindSeam;
+        if (useFordFulkerson) findSeam = CPU::FordFulkersonFindSeam;
     }
     else
         CUDA::warmUpGPU();
