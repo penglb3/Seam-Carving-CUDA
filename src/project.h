@@ -15,7 +15,7 @@ namespace CPU{
     std::vector<int> findSeam(cv::Mat& energyMap);
     void removeSeam(cv::Mat& image, std::vector<int> seam);
     void trans(cv::Mat& image);
-    // std::vector<int> FloydWarshallFindSeam(cv::Mat& energy);
+    std::vector<int> FordFulkersonFindSeam(cv::Mat& energy);
 }
 
 namespace CUDA{
@@ -25,7 +25,7 @@ namespace CUDA{
     std::vector<int> findSeam(cv::Mat& energyMap);
     void removeSeam(cv::Mat& image, std::vector<int> seam);
     void trans(cv::Mat& image);
-    // std::vector<int> FloydWarshallFindSeam(cv::Mat& energy);
+    std::vector<int> FordFulkersonFindSeam(cv::Mat& energy);
 }
 
 extern float sobelEnergyTime;

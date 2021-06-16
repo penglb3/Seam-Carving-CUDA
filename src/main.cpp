@@ -25,7 +25,7 @@ int main(int argc, char** argv)
     // Program parameters
     int width = 0, height = 0, parallel = 1,
         blockDimX = 32, blockDimY = 32; // WARNING: blockDim parameters are not really applied.
-    bool useFloydWarshall = false;
+    bool useFordFulkerson = false;
 
     const char* imageName = "images/Tension.jpg";
     const char* outputName = "images/output.jpg";
@@ -41,7 +41,7 @@ int main(int argc, char** argv)
             case 'i': imageName = optarg;break;			// input filename
             case 'o': outputName = optarg;break;		// output filename
             case 's': parallel = 0;break;				// use parallel mode?
-            case 'f': useFloydWarshall = true;break;    // use Floyd Warshall parallel?
+            case 'f': useFordFulkerson = true;break;    // use Ford Fulkerson parallel?
             default : abort();
         }
     if (!width && !height) {
@@ -78,7 +78,7 @@ int main(int argc, char** argv)
     vector<int> (*findSeam)(Mat&) = CUDA::findSeam;
     void (*removeSeam)(Mat&, vector<int>) = CUDA::removeSeam;
     void (*trans)(Mat&) = CUDA::trans;
-    // if (useFloydWarshall) findSeam = CUDA::FloydWarshallFindSeam;
+    if (useFordFulkerson) findSeam = CUDA::FordFulkersonFindSeam;
 
     if (!parallel){
         createEnergyImg = CPU::createEnergyImg;
@@ -86,7 +86,7 @@ int main(int argc, char** argv)
         findSeam = CPU::findSeam;
         removeSeam = CPU::removeSeam;
         trans = CPU::trans;
-        // if (useFloydWarshall) findSeam = CPU::FloydWarshallFindSeam;
+        if (useFordFulkerson) findSeam = CPU::FordFulkersonFindSeam;
     }
     else
         CUDA::warmUpGPU();
@@ -96,7 +96,7 @@ int main(int argc, char** argv)
     // Vertical seam
     for (int i = 0; i < reduceWidth; i++) {
         energy = createEnergyImg(image);
-        if (!useFloydWarshall) energy = createEnergyMap(energy);
+        if (!useFordFulkerson) energy = createEnergyMap(energy);
         seam = findSeam(energy);
         removeSeam(image, seam);
     }
@@ -107,7 +107,7 @@ int main(int argc, char** argv)
     // Horizontal seam
     for (int j = 0; j < reduceHeight; j++) {
         energy = createEnergyImg(image);
-        energyMap = createEnergyMap(energy);
+        if (!useFordFulkerson) energy = createEnergyMap(energy);
         seam = findSeam(energyMap);
         removeSeam(image, seam);
     }
