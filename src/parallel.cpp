@@ -19,7 +19,7 @@ namespace CUDA{
         getEnergyMap(energy, energyMap, rowSize, colSize);
 
         auto end = chrono::high_resolution_clock::now();
-        cumEnergyTime += chrono::duration_cast<chrono::milliseconds>(end - start).count();
+        cumEnergyTime += chrono::duration_cast<chrono::microseconds>(end - start).count() / 1e3;
         return energyMap;
     }
 
@@ -60,9 +60,7 @@ namespace CUDA{
         }
         
         auto end = chrono::high_resolution_clock::now();
-        findSeamTime += chrono::duration_cast<chrono::milliseconds>(end - start).count();
+        findSeamTime += chrono::duration_cast<chrono::microseconds>(end - start).count() / 1e3;
         return seam;
     }
-
-    // vector<int> FordFulkersonFindSeam(Mat& energy) {}
 }

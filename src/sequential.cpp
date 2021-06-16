@@ -47,7 +47,7 @@ namespace CPU{
         grad.convertTo(energy, CV_64F, 1.0 / 255.0);
 
         auto end = chrono::high_resolution_clock::now();
-        sobelEnergyTime += chrono::duration_cast<chrono::milliseconds>(end - start).count();
+        sobelEnergyTime += chrono::duration_cast<chrono::microseconds>(end - start).count() / 1e3;
 
         return energy;
     }
@@ -77,7 +77,7 @@ namespace CPU{
         }
 
         auto end = chrono::high_resolution_clock::now();
-        cumEnergyTime += chrono::duration_cast<chrono::milliseconds>(end - start).count();
+        cumEnergyTime += chrono::duration_cast<chrono::microseconds>(end - start).count() / 1e3;
 
         return energyMap;
     }
@@ -119,7 +119,7 @@ namespace CPU{
         }
 
         auto end = chrono::high_resolution_clock::now();
-        findSeamTime += chrono::duration_cast<chrono::milliseconds>(end - start).count();
+        findSeamTime += chrono::duration_cast<chrono::microseconds>(end - start).count() / 1e3;
         return seam;
     }
 
@@ -151,142 +151,7 @@ namespace CPU{
         
         //imshow("after cut", image);
         auto end = chrono::high_resolution_clock::now();
-        removeSeamTime += chrono::duration_cast<chrono::milliseconds>(end - start).count();
+        removeSeamTime += chrono::duration_cast<chrono::microseconds>(end - start).count() / 1e3;
         return;
-    }
-
-    vector<int> FordFulkersonFindSeam(Mat& energy) {
-        int *edge_from, *edge_to;
-        double *edge_capacity, *edge_flow;
-        int *neighbor, *direction, *state;
-        double *left;
-        int *edge_memory;
-
-        int n = energy.rows;
-        int m = energy.cols;
-
-        // 0 for source, 1 for sink
-        int node_size = 2 + n * (m + 1);
-        neighbor = new int[node_size]();
-        direction = new int[node_size]();
-        left = new double[node_size]();
-        state = new int[node_size]();
-        edge_memory = new int[node_size]();
-
-        int edge_size = 2 * n + 2 * n * m + 2  * (n - 1) * m;
-        edge_from = new int[edge_size];
-        edge_to = new int[edge_size];
-        edge_capacity = new double[edge_size];
-        edge_flow = new double[edge_size];
-
-        int edge_cnt = 0;
-        // source and sink related edges
-        for (int i = 0; i < n; i++) {
-            // source
-            edge_from[edge_cnt] = 0;
-            edge_to[edge_cnt] = i * (m + 1) + 2;
-            edge_capacity[edge_cnt] = numeric_limits<double>::max() / 2.0;
-            edge_flow[edge_cnt] = 0.0;
-            edge_cnt++;
-            // sink
-            edge_from[edge_cnt] = i * (m + 1) + m + 2;
-            edge_to[edge_cnt] = 1;
-            edge_capacity[edge_cnt] = numeric_limits<double>::max() / 2.0;
-            edge_flow[edge_cnt] = 0.0;
-            edge_cnt++;
-        }
-
-        for (int i = 0; i < n; i++) {
-            for (int j = 0; j < m + 1; j++) {
-                if (j < m){
-                    edge_from[edge_cnt] = i * (m + 1) + j + 2;
-                    edge_to[edge_cnt] = i * (m + 1) + j + 1 + 2;
-                    edge_capacity[edge_cnt] = energy.at<double>(i, j);
-                    edge_flow[edge_cnt] = 0.0;
-                    edge_cnt++;
-                }
-                if (j > 0) {
-                    edge_from[edge_cnt] = i * (m + 1) + j + 2;
-                    edge_to[edge_cnt] = i * (m + 1) + (j - 1) + 2;
-                    edge_capacity[edge_cnt] = numeric_limits<double>::max() / 2.0;
-                    edge_flow[edge_cnt] = 0.0;
-                    edge_cnt++;
-                }
-                if (j > 0 && i < n - 1) {
-                    edge_from[edge_cnt] = i * (m + 1) + j + 2;
-                    edge_to[edge_cnt] = (i + 1) * (m + 1) + (j - 1) + 2;
-                    edge_capacity[edge_cnt] = numeric_limits<double>::max() / 2.0;
-                    edge_flow[edge_cnt] = 0.0;
-                    edge_cnt++;
-                }
-                if (j > 0 && i > 0) {
-                    edge_from[edge_cnt] = i * (m + 1) + j + 2;
-                    edge_to[edge_cnt] = (i - 1) * (m + 1) + (j - 1) + 2;
-                    edge_capacity[edge_cnt] = numeric_limits<double>::max() / 2.0;
-                    edge_flow[edge_cnt] = 0.0;
-                    edge_cnt++;
-                }
-            }
-        }
-        assert(edge_cnt == edge_size);
-
-        while (true) {
-            // Step1
-            state[0] = UNSCANNED;
-            left[0] = numeric_limits<double>::max() / 2.0;
-
-            // Step2
-            int flag;
-            while (true) {
-                flag = 1;
-                for (int i = 0; i < edge_size; i++) {
-                    if (state[edge_from[i]] == UNSCANNED && state[edge_to[i]] == UNLABELED && (edge_capacity[i] - edge_flow[i]) > EPS ) {
-                        neighbor[edge_to[i]] = edge_from[i];
-                        edge_memory[edge_to[i]] = i;
-                        direction[edge_to[i]] = IN;
-                        left[edge_to[i]] = left[edge_from[i]] < (edge_capacity[i] - edge_flow[i]) ? left[edge_from[i]] : (edge_capacity[i] - edge_flow[i]);
-                        state[edge_from[i]] = SCANNED;
-                        state[edge_to[i]] = UNSCANNED;
-                        flag = 0;
-                    }
-                    if (state[edge_from[i]] == UNLABELED && state[edge_to[i]] == UNSCANNED && edge_flow[i] > 0.0) {
-                        neighbor[edge_from[i]] = edge_to[i];
-                        edge_memory[edge_from[i]] = i;
-                        direction[edge_from[i]] = OUT;
-                        left[edge_from[i]] = left[edge_to[i]] < edge_flow[i] ? left[edge_to[i]] : edge_flow[i];
-                        state[edge_to[i]] = SCANNED;
-                        state[edge_from[i]] = UNSCANNED;
-                        flag = 0;
-                    }
-                }
-                if (state[1] == UNSCANNED || flag) break;
-            }
-            if (flag) break;
-
-            // Step3
-            int x = 2;
-            while (x != 1) {
-                if (direction[x] == IN) {
-                    edge_flow[edge_memory[x]] += left[2];
-                }
-                else if (direction[x] == OUT) {
-                    edge_flow[edge_memory[x]] -= left[2];
-                }
-                x = neighbor[x];
-            }
-
-            memset(state, 0, sizeof(int)*node_size);
-        }
-
-
-        vector<int> seam(n);
-        for (int i = 0; i < edge_size; i++) {
-            if (edge_capacity[i] - edge_flow[i] <= EPS) {
-                int row = (edge_from[i] - 2) / n;
-                int col = (edge_from[i] - 2) % n;
-                seam[row] = col;
-            }
-        }
-        return seam;
     }
 }
