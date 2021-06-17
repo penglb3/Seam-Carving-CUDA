@@ -32,7 +32,7 @@ int main(int argc, char** argv)
 
     // Get parameters from arguments (if provided)
     char c;
-    while((c = getopt(argc, argv, "w:h:x:y:i:o:sf"))!=-1)
+    while((c = getopt(argc, argv, "w:h:x:y:i:o:s"))!=-1)
         switch(c){
             case 'x': blockDimX = atoi(optarg);break; 	// block dim x
             case 'y': blockDimY = atoi(optarg);break; 	// block dim y
@@ -72,6 +72,7 @@ int main(int argc, char** argv)
     // imshow("Original", image);
 
     // Choose the mode: default = CUDA
+<<<<<<< HEAD
     // Mat (*createEnergyImg)(Mat&) = CUDA::createEnergyImg;
     // Mat (*createEnergyMap)(Mat&) = CUDA::createEnergyMap;
     // vector<int> (*findSeam)(Mat&) = CUDA::findSeam;
@@ -114,6 +115,49 @@ int main(int argc, char** argv)
     // auto end = std::chrono::high_resolution_clock::now();
     // transposeTime += std::chrono::duration_cast<std::chrono::milliseconds>(end - startTranspose).count();
     // float totalTime = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+=======
+    Mat (*createEnergyImg)(Mat&) = CUDA::createEnergyImg;
+    Mat (*createEnergyMap)(Mat&) = CUDA::createEnergyMap;
+    vector<int> (*findSeam)(Mat&) = CUDA::findSeam;
+    void (*removeSeam)(Mat&, vector<int>) = CUDA::removeSeam;
+    void (*trans)(Mat&) = CUDA::trans;
+
+    if (!parallel){
+        createEnergyImg = CPU::createEnergyImg;
+        createEnergyMap = CPU::createEnergyMap;
+        findSeam = CPU::findSeam;
+        removeSeam = CPU::removeSeam;
+        trans = CPU::trans;
+    }
+    else
+        CUDA::warmUpGPU();
+    Mat energy, energyMap;
+    vector<int> seam;
+    auto start = std::chrono::high_resolution_clock::now();
+    // Vertical seam
+    for (int i = 0; i < reduceWidth; i++) {
+        energy = createEnergyImg(image);
+        energy = createEnergyMap(energy);
+        seam = findSeam(energy);
+        removeSeam(image, seam);
+    }
+    auto startTranspose = std::chrono::high_resolution_clock::now();
+    trans(image);
+    auto endTranspose = std::chrono::high_resolution_clock::now();
+    transposeTime += std::chrono::duration_cast<std::chrono::microseconds>(endTranspose - startTranspose).count() / 1e3;
+    // Horizontal seam
+    for (int j = 0; j < reduceHeight; j++) {
+        energy = createEnergyImg(image);
+        energy = createEnergyMap(energy);
+        seam = findSeam(energy);
+        removeSeam(image, seam);
+    }
+    startTranspose = std::chrono::high_resolution_clock::now();
+    trans(image);
+    auto end = std::chrono::high_resolution_clock::now();
+    transposeTime += std::chrono::duration_cast<std::chrono::microseconds>(end - startTranspose).count() / 1e3;
+    float totalTime = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() / 1e3;
+>>>>>>> 98fe07ff8bd6e4607381d2e981b1cdf17ecd81d4
 
     // Report results and statistics.
     #ifdef _WIN32

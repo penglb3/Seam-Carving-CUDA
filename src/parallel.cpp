@@ -27,7 +27,7 @@ namespace CUDA{
         getEnergyMap(energy, energyMap, rowSize, colSize);
 
         auto end = chrono::high_resolution_clock::now();
-        cumEnergyTime += chrono::duration_cast<chrono::milliseconds>(end - start).count();
+        cumEnergyTime += chrono::duration_cast<chrono::microseconds>(end - start).count() / 1e3;
         return energyMap;
     }
 
@@ -68,9 +68,10 @@ namespace CUDA{
         }
         
         auto end = chrono::high_resolution_clock::now();
-        findSeamTime += chrono::duration_cast<chrono::milliseconds>(end - start).count();
+        findSeamTime += chrono::duration_cast<chrono::microseconds>(end - start).count() / 1e3;
         return seam;
     }
+<<<<<<< HEAD
 
     void wrapper(Mat& image, int& reduceWidth, int& reduceHeight)
     {
@@ -100,3 +101,6 @@ namespace CUDA{
         totalTime = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
     }
 }
+=======
+}
+>>>>>>> 98fe07ff8bd6e4607381d2e981b1cdf17ecd81d4

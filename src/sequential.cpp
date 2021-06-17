@@ -15,12 +15,16 @@ constexpr int SCANNED = 2;
 constexpr int IN = 1;
 constexpr int OUT = 0;
 
+<<<<<<< HEAD
 extern float sobelEnergyTime;
 extern float cumEnergyTime;
 extern float findSeamTime;
 extern float removeSeamTime;
 extern float transposeTime;
 extern float totalTime;
+=======
+constexpr double EPS = 1e-3;
+>>>>>>> 98fe07ff8bd6e4607381d2e981b1cdf17ecd81d4
 
 namespace CPU{
     void trans(Mat& image){
@@ -52,7 +56,7 @@ namespace CPU{
         grad.convertTo(energy, CV_64F, 1.0 / 255.0);
 
         auto end = chrono::high_resolution_clock::now();
-        sobelEnergyTime += chrono::duration_cast<chrono::milliseconds>(end - start).count();
+        sobelEnergyTime += chrono::duration_cast<chrono::microseconds>(end - start).count() / 1e3;
 
         return energy;
     }
@@ -82,7 +86,7 @@ namespace CPU{
         }
 
         auto end = chrono::high_resolution_clock::now();
-        cumEnergyTime += chrono::duration_cast<chrono::milliseconds>(end - start).count();
+        cumEnergyTime += chrono::duration_cast<chrono::microseconds>(end - start).count() / 1e3;
 
         return energyMap;
     }
@@ -124,7 +128,7 @@ namespace CPU{
         }
 
         auto end = chrono::high_resolution_clock::now();
-        findSeamTime += chrono::duration_cast<chrono::milliseconds>(end - start).count();
+        findSeamTime += chrono::duration_cast<chrono::microseconds>(end - start).count() / 1e3;
         return seam;
     }
 
@@ -156,9 +160,10 @@ namespace CPU{
         
         //imshow("after cut", image);
         auto end = chrono::high_resolution_clock::now();
-        removeSeamTime += chrono::duration_cast<chrono::milliseconds>(end - start).count();
+        removeSeamTime += chrono::duration_cast<chrono::microseconds>(end - start).count() / 1e3;
         return;
     }
+<<<<<<< HEAD
 
     void wrapper(Mat& image, int& reduceWidth, int& reduceHeight)
     {
@@ -188,3 +193,6 @@ namespace CPU{
         totalTime = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
     }
 }
+=======
+}
+>>>>>>> 98fe07ff8bd6e4607381d2e981b1cdf17ecd81d4

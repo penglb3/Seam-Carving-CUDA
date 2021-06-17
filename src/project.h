@@ -16,7 +16,10 @@ namespace CPU{
     std::vector<int> findSeam(cv::Mat& energyMap);
     void removeSeam(cv::Mat& image, std::vector<int> seam);
     void trans(cv::Mat& image);
+<<<<<<< HEAD
     void wrapper(cv::Mat& image, int& reduceWidth, int& reduceHeight);
+=======
+>>>>>>> 98fe07ff8bd6e4607381d2e981b1cdf17ecd81d4
 }
 
 namespace CUDA{
@@ -26,7 +29,10 @@ namespace CUDA{
     std::vector<int> findSeam(cv::Mat& energyMap);
     void removeSeam(cv::Mat& image, std::vector<int> seam);
     void trans(cv::Mat& image);
+<<<<<<< HEAD
     void wrapper(cv::Mat& image, int& reduceWidth, int& reduceHeight);
+=======
+>>>>>>> 98fe07ff8bd6e4607381d2e981b1cdf17ecd81d4
 }
 
 extern float sobelEnergyTime;

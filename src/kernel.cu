@@ -209,7 +209,7 @@ namespace CUDA{
         HANDLE_ERROR( cudaFree(d_output) );
 
         auto end = chrono::high_resolution_clock::now();
-        sobelEnergyTime += chrono::duration_cast<chrono::milliseconds>(end - start).count();
+        sobelEnergyTime += chrono::duration_cast<chrono::microseconds>(end - start).count() / 1e3;
         return h_output;
     }
 
@@ -242,7 +242,7 @@ namespace CUDA{
         HANDLE_ERROR( cudaFree(d_seam) );
 
         auto endRemove = chrono::high_resolution_clock::now();
-        removeSeamTime += chrono::duration_cast<chrono::milliseconds>(endRemove - startRemove).count();
+        removeSeamTime += chrono::duration_cast<chrono::microseconds>(endRemove - startRemove).count() / 1e3;
     }
 }
 
