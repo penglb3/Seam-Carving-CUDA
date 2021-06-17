@@ -15,16 +15,12 @@ constexpr int SCANNED = 2;
 constexpr int IN = 1;
 constexpr int OUT = 0;
 
-<<<<<<< HEAD
 extern float sobelEnergyTime;
 extern float cumEnergyTime;
 extern float findSeamTime;
 extern float removeSeamTime;
 extern float transposeTime;
 extern float totalTime;
-=======
-constexpr double EPS = 1e-3;
->>>>>>> 98fe07ff8bd6e4607381d2e981b1cdf17ecd81d4
 
 namespace CPU{
     void trans(Mat& image){
@@ -163,7 +159,6 @@ namespace CPU{
         removeSeamTime += chrono::duration_cast<chrono::microseconds>(end - start).count() / 1e3;
         return;
     }
-<<<<<<< HEAD
 
     void wrapper(Mat& image, int& reduceWidth, int& reduceHeight)
     {
@@ -173,13 +168,14 @@ namespace CPU{
         // Vertical seam
         for (int i = 0; i < reduceWidth; i++) {
             energy = createEnergyImg(image);
+            energy = createEnergyMap(energy);
             seam = findSeam(energy);
             removeSeam(image, seam);
         }
         auto startTranspose = std::chrono::high_resolution_clock::now();
         trans(image);
         auto endTranspose = std::chrono::high_resolution_clock::now();
-        transposeTime += std::chrono::duration_cast<std::chrono::milliseconds>(endTranspose - startTranspose).count();
+        transposeTime += std::chrono::duration_cast<std::chrono::microseconds>(endTranspose - startTranspose).count() / 1e3;
         // Horizontal seam
         for (int j = 0; j < reduceHeight; j++) {
             energy = createEnergyImg(image);
@@ -189,10 +185,7 @@ namespace CPU{
         startTranspose = std::chrono::high_resolution_clock::now();
         trans(image);
         auto end = std::chrono::high_resolution_clock::now();
-        transposeTime += std::chrono::duration_cast<std::chrono::milliseconds>(end - startTranspose).count();
-        totalTime = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+        transposeTime += std::chrono::duration_cast<std::chrono::microseconds>(end - startTranspose).count() / 1e3;
+        totalTime = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() / 1e3;
     }
 }
-=======
-}
->>>>>>> 98fe07ff8bd6e4607381d2e981b1cdf17ecd81d4
