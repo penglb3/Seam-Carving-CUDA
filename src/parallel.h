@@ -11,5 +11,6 @@
 void getEnergyMap(cv::Mat& h_energy, cv::Mat& h_energyMap, int rowSize, int colSize);
 int getMinCumulativeEnergy(cv::Mat& h_energyMap, int rowSize, int colSize);
 void removeSeam(cv::Mat& h_image, std::vector<int> h_seam);
+void wrapper(cv::Mat& image, int& reduceWidth, int& reduceHeight);
 
 #endif

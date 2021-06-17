@@ -15,6 +15,13 @@ constexpr int SCANNED = 2;
 constexpr int IN = 1;
 constexpr int OUT = 0;
 
+extern float sobelEnergyTime;
+extern float cumEnergyTime;
+extern float findSeamTime;
+extern float removeSeamTime;
+extern float transposeTime;
+extern float totalTime;
+
 namespace CPU{
     void trans(Mat& image){
         transpose(image, image);
@@ -153,83 +160,31 @@ namespace CPU{
         return;
     }
 
-    vector<int> FordFulkersonFindSeam(Mat& energy) {
-        int *edge_from, *edge_to;
-        double *edge_capacity, *edge_flow;
-        int *neighbor, *direction, *residual, *state;
-
-        int n = energy.rows;
-        int m = energy.cols;
-
-        // 0 for source, 1 for sink
-        int node_size = 2 + n * (m + 1);
-        neighbor = new int[node_size];
-        direction = new int[node_size];
-        residual = new int[node_size];
-        state = new int[node_size];
-
-        for (int i = 0; i < node_size; i++) {
-            neighbor[i] = 0;
-            direction[i] = 0;
-            residual[i] = 0;
-            state[i] = UNLABELED;
+    void wrapper(Mat& image, int& reduceWidth, int& reduceHeight)
+    {
+        Mat energy, energyMap;
+        vector<int> seam;
+        auto start = std::chrono::high_resolution_clock::now();
+        // Vertical seam
+        for (int i = 0; i < reduceWidth; i++) {
+            energy = createEnergyImg(image);
+            seam = findSeam(energy);
+            removeSeam(image, seam);
         }
-
-        int edge_size = 2 * n + 2 * n * m + 2  * (n - 1) * m;
-        edge_from = new int[edge_size];
-        edge_to = new int[edge_size];
-        edge_capacity = new double[edge_size];
-        edge_flow = new double[edge_size];
-
-        int edge_cnt = 0;
-        // source and sink related edges
-        for (int i = 0; i < n; i++) {
-            // source
-            edge_from[edge_cnt] = 0;
-            edge_to[edge_cnt] = i * (m + 1) + 2;
-            edge_capacity[edge_cnt] = numeric_limits<double>::max() / 2.0;
-            edge_flow[edge_cnt] = 0.0;
-            edge_cnt++;
-            // sink
-            edge_from[edge_cnt] = i * (m + 1) + m + 2;
-            edge_to[edge_cnt] = 1;
-            edge_capacity[edge_cnt] = numeric_limits<double>::max() / 2.0;
-            edge_flow[edge_cnt] = 0.0;
-            edge_cnt++;
+        auto startTranspose = std::chrono::high_resolution_clock::now();
+        trans(image);
+        auto endTranspose = std::chrono::high_resolution_clock::now();
+        transposeTime += std::chrono::duration_cast<std::chrono::milliseconds>(endTranspose - startTranspose).count();
+        // Horizontal seam
+        for (int j = 0; j < reduceHeight; j++) {
+            energy = createEnergyImg(image);
+            seam = findSeam(energy);
+            removeSeam(image, seam);
         }
-
-        for (int i = 0; i < n; i++) {
-            for (int j = 0; j < m + 1; j++) {
-                if (j < m){
-                    edge_from[edge_cnt] = i * (m + 1) + j + 2;
-                    edge_to[edge_cnt] = i * (m + 1) + j + 1 + 2;
-                    edge_capacity[edge_cnt] = energy.at<double>(i, j);
-                    edge_flow[edge_cnt] = 0.0;
-                    edge_cnt++;
-                }
-                if (j > 0) {
-                    edge_from[edge_cnt] = i * (m + 1) + j + 2;
-                    edge_to[edge_cnt] = i * (m + 1) + (j - 1) + 2;
-                    edge_capacity[edge_cnt] = numeric_limits<double>::max() / 2.0;
-                    edge_flow[edge_cnt] = 0.0;
-                    edge_cnt++;
-                }
-                if (j > 0 && i < n - 1) {
-                    edge_from[edge_cnt] = i * (m + 1) + j + 2;
-                    edge_to[edge_cnt] = (i + 1) * (m + 1) + (j - 1) + 2;
-                    edge_capacity[edge_cnt] = numeric_limits<double>::max() / 2.0;
-                    edge_flow[edge_cnt] = 0.0;
-                    edge_cnt++;
-                }
-                if (j > 0 && i > 0) {
-                    edge_from[edge_cnt] = i * (m + 1) + j + 2;
-                    edge_to[edge_cnt] = (i - 1) * (m + 1) + (j - 1) + 2;
-                    edge_capacity[edge_cnt] = numeric_limits<double>::max() / 2.0;
-                    edge_flow[edge_cnt] = 0.0;
-                    edge_cnt++;
-                }
-            }
-        }
-        assert(edge_cnt == edge_size);
+        startTranspose = std::chrono::high_resolution_clock::now();
+        trans(image);
+        auto end = std::chrono::high_resolution_clock::now();
+        transposeTime += std::chrono::duration_cast<std::chrono::milliseconds>(end - startTranspose).count();
+        totalTime = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
     }
 }

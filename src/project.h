@@ -8,6 +8,7 @@
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/core/hal/interface.h>
+#include <opencv2/core/cuda.hpp>
 
 namespace CPU{
     cv::Mat createEnergyImg(cv::Mat &image);
@@ -15,7 +16,7 @@ namespace CPU{
     std::vector<int> findSeam(cv::Mat& energyMap);
     void removeSeam(cv::Mat& image, std::vector<int> seam);
     void trans(cv::Mat& image);
-    std::vector<int> FordFulkersonFindSeam(cv::Mat& energy);
+    void wrapper(cv::Mat& image, int& reduceWidth, int& reduceHeight);
 }
 
 namespace CUDA{
@@ -25,7 +26,7 @@ namespace CUDA{
     std::vector<int> findSeam(cv::Mat& energyMap);
     void removeSeam(cv::Mat& image, std::vector<int> seam);
     void trans(cv::Mat& image);
-    std::vector<int> FordFulkersonFindSeam(cv::Mat& energy);
+    void wrapper(cv::Mat& image, int& reduceWidth, int& reduceHeight);
 }
 
 extern float sobelEnergyTime;

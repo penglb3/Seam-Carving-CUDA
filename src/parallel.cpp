@@ -6,6 +6,14 @@
 
 using namespace std;
 using namespace cv;
+using namespace cv::cuda;
+
+extern float sobelEnergyTime;
+extern float cumEnergyTime;
+extern float findSeamTime;
+extern float removeSeamTime;
+extern float transposeTime;
+extern float totalTime;
 
 namespace CUDA{
     Mat createEnergyMap(Mat& energy) {
@@ -64,5 +72,31 @@ namespace CUDA{
         return seam;
     }
 
-    vector<int> FordFulkersonFindSeam(Mat& energy) {}
+    void wrapper(Mat& image, int& reduceWidth, int& reduceHeight)
+    {
+        Mat energy, energyMap;
+        vector<int> seam;
+        auto start = std::chrono::high_resolution_clock::now();
+        // Vertical seam
+        for (int i = 0; i < reduceWidth; i++) {
+            energy = createEnergyImg(image);
+            seam = findSeam(energy);
+            removeSeam(image, seam);
+        }
+        auto startTranspose = std::chrono::high_resolution_clock::now();
+        trans(image);
+        auto endTranspose = std::chrono::high_resolution_clock::now();
+        transposeTime += std::chrono::duration_cast<std::chrono::milliseconds>(endTranspose - startTranspose).count();
+        // Horizontal seam
+        for (int j = 0; j < reduceHeight; j++) {
+            energy = createEnergyImg(image);
+            seam = findSeam(energy);
+            removeSeam(image, seam);
+        }
+        startTranspose = std::chrono::high_resolution_clock::now();
+        trans(image);
+        auto end = std::chrono::high_resolution_clock::now();
+        transposeTime += std::chrono::duration_cast<std::chrono::milliseconds>(end - startTranspose).count();
+        totalTime = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+    }
 }
