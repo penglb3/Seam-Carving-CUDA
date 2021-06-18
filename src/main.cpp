@@ -67,7 +67,7 @@ int main(int argc, char** argv)
     printf(">>>>> Running %s <<<<<\n", parallel?"CUDA":"CPU");
     cout << "Image name: " << imageName << endl;
     cout << "Input dimension " << imageSize.first << " x " << imageSize.second << endl;
-    cout << "Output dimension " << image.cols-reduceWidth << " x " << image.rows-reduceHeight << endl << endl;
+    // cout << "Output dimension " << image.cols-reduceWidth << " x " << image.rows-reduceHeight << endl << endl;
 
     // imshow("Original", image);
 
@@ -80,6 +80,8 @@ int main(int argc, char** argv)
     else
         CUDA::warmUpGPU();
     wrapper(image, reduceWidth, reduceHeight);
+
+    cout << "Output dimension " << image.cols << " x " << image.rows << endl << endl;
 
     // Report results and statistics.
     #ifdef _WIN32
