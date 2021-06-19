@@ -17,4 +17,5 @@ images/output.jpg
 
 src/*.exe
 src/*.exp
-erc/*.lib
+src/*.lib
+src/*.avi

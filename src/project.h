@@ -10,6 +10,8 @@
 #include <opencv2/cudaimgproc.hpp>
 #include <opencv2/core/hal/interface.h>
 #include <opencv2/core/cuda.hpp>
+#include <opencv2/core/types.hpp>
+#include <opencv2/videoio.hpp>
 
 namespace CPU{
     cv::Mat createEnergyImg(cv::Mat &image);

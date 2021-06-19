@@ -22,6 +22,10 @@ extern float removeSeamTime;
 extern float transposeTime;
 extern float totalTime;
 
+extern int visualize;
+extern double* time_records;
+extern int records_idx;
+
 namespace CPU{
     void trans(Mat& image){
         transpose(image, image);
@@ -162,30 +166,55 @@ namespace CPU{
 
     void wrapper(Mat& image, int& reduceWidth, int& reduceHeight)
     {
-        Mat energy, energyMap;
+        Mat energy, energyMap, h_temp;
         vector<int> seam;
         auto start = std::chrono::high_resolution_clock::now();
+        std::chrono::steady_clock::time_point record;
+        if (visualize == 1)
+        {
+            record = std::chrono::high_resolution_clock::now();
+            time_records[++records_idx] = std::chrono::duration_cast<std::chrono::microseconds>(record - start).count() / 1e6;
+        }
         // Vertical seam
         for (int i = 0; i < reduceWidth; i++) {
             energy = createEnergyImg(image);
             energy = createEnergyMap(energy);
             seam = findSeam(energy);
             removeSeam(image, seam);
+            if (visualize == 1)
+            {
+                record = std::chrono::high_resolution_clock::now();
+                time_records[++records_idx] = std::chrono::duration_cast<std::chrono::microseconds>(record - start).count() / 1e6;
+            }
         }
         auto startTranspose = std::chrono::high_resolution_clock::now();
         trans(image);
         auto endTranspose = std::chrono::high_resolution_clock::now();
         transposeTime += std::chrono::duration_cast<std::chrono::microseconds>(endTranspose - startTranspose).count() / 1e3;
+        if (visualize == 1)
+        {
+            record = std::chrono::high_resolution_clock::now();
+            time_records[++records_idx] = std::chrono::duration_cast<std::chrono::microseconds>(record - start).count() / 1e6;
+        }
         // Horizontal seam
         for (int j = 0; j < reduceHeight; j++) {
             energy = createEnergyImg(image);
             seam = findSeam(energy);
             removeSeam(image, seam);
+            if (visualize == 1)
+            {
+                record = std::chrono::high_resolution_clock::now();
+                time_records[++records_idx] = std::chrono::duration_cast<std::chrono::microseconds>(record - start).count() / 1e6;
+            }
         }
         startTranspose = std::chrono::high_resolution_clock::now();
         trans(image);
         auto end = std::chrono::high_resolution_clock::now();
         transposeTime += std::chrono::duration_cast<std::chrono::microseconds>(end - startTranspose).count() / 1e3;
         totalTime = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() / 1e3;
+        if (visualize == 1)
+        {
+            time_records[++records_idx] = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() / 1e6;
+        }
     }
 }
