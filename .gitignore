@@ -12,10 +12,10 @@ _deps
 
 bin/
 build/
-.vscode
 images/output.jpg
 
 src/*.exe
 src/*.exp
 src/*.lib
 src/*.avi
+src/*.pdb

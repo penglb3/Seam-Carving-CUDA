@@ -35,19 +35,16 @@ int fH;
 int main(int argc, char** argv)
 {    
     // Program parameters
-    int width = 0, height = 0, parallel = 1,
-        blockDimX = 32, blockDimY = 32; // WARNING: blockDim parameters are not really applied.
+    int width = 0, height = 0, parallel = 1;
 
-    const char* imageName = "images/Tension.jpg";
-    const char* outputName = "images/output.jpg";
+    const char* imageName = "../images/Tension.jpg";
+    const char* outputName = "../images/output.jpg";
 
     // Get parameters from arguments (if provided)
     char c;
-    // while((c = getopt(argc, argv, "w:h:x:y:i:o:s"))!=-1)
-    while((c = getopt(argc, argv, "w:h:x:y:i:o:svf:"))!=-1)
+
+    while((c = getopt(argc, argv, "w:h:i:o:svf:"))!=-1)
         switch(c){
-            case 'x': blockDimX = atoi(optarg);break; 	    // block dim x
-            case 'y': blockDimY = atoi(optarg);break; 	    // block dim y
             case 'w': width = atoi(optarg);break;		    // output width
             case 'h': height = atoi(optarg);break;		    // output height
             case 'i': imageName = optarg;break;			    // input filename
@@ -59,18 +56,12 @@ int main(int argc, char** argv)
         }
     if (!width && !height) {
         cout << "No resizing needed, exiting." << endl;
-        #ifdef _WIN32
-        system("pause");
-        #endif
         return 0;
     }
     // Set up reduction width and height and read image.
     Mat image = imread(imageName, IMREAD_COLOR);
     if (image.empty()) {
         cout << "Invalid image. Please try again." << endl;
-        #ifdef _WIN32
-        system("pause");
-        #endif
         return 1;
     }
     pair<int, int> imageSize = { image.cols, image.rows };
@@ -81,9 +72,6 @@ int main(int argc, char** argv)
     printf(">>>>> Running %s <<<<<\n", parallel?"CUDA":"CPU");
     cout << "Image name: " << imageName << endl;
     cout << "Input dimension " << imageSize.first << " x " << imageSize.second << endl;
-    // cout << "Output dimension " << image.cols-reduceWidth << " x " << image.rows-reduceHeight << endl << endl;
-
-    // imshow("Original", image);
 
     // Choose the mode: default = CUDA
     void (*wrapper)(Mat&, int&, int&) = CUDA::wrapper;
@@ -140,9 +128,6 @@ int main(int argc, char** argv)
     cout << "Total time: " << totalTime << "(ms)" << endl;
 
     imwrite(outputName, image);
-    #ifdef _WIN32
-    waitKey(0);
-    #endif
 
     return 0;
 }

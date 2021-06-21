@@ -1,0 +1,33 @@
+{
+    "version": "2.0.0",
+    // See https://go.microsoft.com/fwlink/?LinkId=733558
+    // for the documentation about the tasks.json format
+    "tasks": [
+        {
+            "type": "cppbuild",
+            "label": "C/C++: NVCC Build",
+            "command": "nvcc",
+            "args": [
+                "main.cpp","sequential.cpp","parallel.cpp","kernel.cu",
+                "-g", "-G",
+                "-I", "../include",
+                "-L", "../lib",
+                "-l", "opencv_core452",
+                "-l", "opencv_imgproc452",
+                "-l", "opencv_imgcodecs452",
+                "-l", "opencv_highgui452",
+                "-l", "opencv_photo452",
+                "-l", "opencv_videoio452",
+                "-o", "seam_carve.exe"
+            ],
+            "options": {
+                "cwd": "${fileDirname}"
+            },
+            "problemMatcher": [
+                "$msCompile"
+            ],
+            "group": "build",
+            "detail": "编译器: nvcc.exe"
+        }
+    ]
+  }
