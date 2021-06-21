@@ -28,15 +28,15 @@ extern int fH;
 MyAllocator myAllocator;
 
 namespace CUDA{
-    GpuMat createEnergyMap(GpuMat& d_energy) {
+    GpuMat calculateEnergyMap(GpuMat& d_energy) {
         auto start = chrono::high_resolution_clock::now();
-        int rowSize = d_energy.rows;
-        int colSize = d_energy.cols;
+        int rows = d_energy.rows;
+        int cols = d_energy.cols;
         // Initialize energy map
-        GpuMat d_energyMap(rowSize, colSize, CV_32F, float(0));
+        GpuMat d_energyMap(rows, cols, CV_32F, float(0));
 
         // Call cuda function to get energy map
-        getEnergyMap(d_energy, d_energyMap, rowSize, colSize);
+        getEnergyMap(d_energy, d_energyMap, rows, cols);
 
         auto end = chrono::high_resolution_clock::now();
         cumEnergyTime += chrono::duration_cast<chrono::microseconds>(end - start).count() / 1e3;
@@ -46,42 +46,40 @@ namespace CUDA{
 
     vector<int> findSeam(GpuMat& d_energyMap) {
         auto start = chrono::high_resolution_clock::now();
-        int rowSize = d_energyMap.rows;
-        int colSize = d_energyMap.cols;
-        int curLoc;
+        int rows = d_energyMap.rows;
+        int cols = d_energyMap.cols;
+        int current;
         vector<int> seam;
-        float topCenter, topLeft, topRight;
+        float upper, upper_left, upper_right;
         double minVal;
         Point minLoc;
 
-        seam.resize(rowSize);
+        seam.resize(rows);
 
-        curLoc = getMinCumulativeEnergy(d_energyMap, rowSize, colSize);
+        current = getMinCumulativeEnergy(d_energyMap);
 
         Mat h_energyMap;
         d_energyMap.download(h_energyMap);
         d_energyMap.release();
 
-        seam[rowSize - 1] = curLoc;
+        seam[rows - 1] = current;
 
         // Look at top neighbors to find next minimum cumulative energy
-        for (int row = rowSize - 1; row > 0; row--) {
-            topCenter = h_energyMap.at<float>(row - 1, curLoc);
-            topLeft = h_energyMap.at<float>(row - 1, max(curLoc - 1, 0));
-            topRight = h_energyMap.at<float>(row - 1, min(curLoc + 1, colSize - 1));
+        for (int row = rows - 2; row >= 0; row--) {
+            upper = h_energyMap.at<float>(row, current);
+            upper_left = h_energyMap.at<float>(row, max(current - 1, 0));
+            upper_right = h_energyMap.at<float>(row, min(current + 1, cols - 1));
 
             // find next col idx
-            if (min(topLeft, topCenter) > topRight) {
-                // topRight smallest
-                curLoc += 1;
+            if (min(upper_left, upper) > upper_right) {
+                // upper_right smallest
+                current += 1;
             }
-            else if (min(topRight, topCenter) > topLeft) {
-                // topLeft smallest
-                curLoc -= 1;
+            else if (min(upper_right, upper) > upper_left) {
+                // upper_left smallest
+                current -= 1;
             }
-            // if topCenter smallest, curCol remain;
-            // update seam
-            seam[row - 1] = curLoc;
+            seam[row] = current;
         }
 
         h_energyMap.release();
@@ -91,7 +89,7 @@ namespace CUDA{
         return seam;
     }
 
-    void wrapper(Mat& image, int& reduceWidth, int& reduceHeight)
+    void seamCarve(Mat& image, int& reduceWidth, int& reduceHeight)
     {
         GpuMat::setDefaultAllocator(&myAllocator);
         GpuMat d_image, d_energy, d_energyMap;
@@ -121,8 +119,8 @@ namespace CUDA{
             cv::copyMakeBorder(h_temp, h_temp, 0, fH-h_temp.rows, 0, fW-h_temp.cols, h_temp.type());
         }
         for (int i = 0; i < reduceWidth; i++) {
-            d_energy = createEnergyImg(d_image);
-            d_energyMap = createEnergyMap(d_energy);
+            d_energy = calculateEnergyImg(d_image);
+            d_energyMap = calculateEnergyMap(d_energy);
             // d_energy.release();
             seam = findSeam(d_energyMap);
            //  d_energyMap.release();
@@ -168,8 +166,8 @@ namespace CUDA{
         }
         // Horizontal seam
         for (int j = 0; j < reduceHeight; j++) {
-            d_energy = createEnergyImg(d_image);
-            d_energyMap = createEnergyMap(d_energy);
+            d_energy = calculateEnergyImg(d_image);
+            d_energyMap = calculateEnergyMap(d_energy);
             d_energy.release();
             seam = findSeam(d_energyMap);
             d_energyMap.release();

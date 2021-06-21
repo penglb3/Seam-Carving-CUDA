@@ -20,7 +20,7 @@ extern float findSeamTime;
 extern float removeSeamTime;
 
 /**************************************************************
-* Error handling and timing
+* Error handling
 **************************************************************/
 static void HandleError( cudaError_t err, const char *file, int line ) {
     if (err != cudaSuccess) {
@@ -32,18 +32,6 @@ static void HandleError( cudaError_t err, const char *file, int line ) {
 
 
 #define HANDLE_ERROR( err ) (HandleError( err, __FILE__, __LINE__ ))
-
-#define TIME_IT_CUDA( exec, time_recorder ) \
-{\
-    cudaEvent_t start, stop;\
-    HANDLE_ERROR( cudaEventCreate(&start) );\
-    HANDLE_ERROR( cudaEventCreate(&stop) );\
-    cudaEventRecord(start);\
-    exec;\
-    cudaEventRecord(stop);\
-    cudaEventSynchronize(stop);\
-    HANDLE_ERROR( cudaEventElapsedTime(&time_recorder, start, stop) );\
-}
 
 /**************************************************************
 * Definitions of the allocator without alignment.
@@ -68,13 +56,13 @@ void MyAllocator::free(GpuMat* mat)
 /**************************************************************
 * Kernel function headers.
 **************************************************************/
-__global__ void warm_up_gpu();
+__global__ void warmUpKernel();
 __global__ void transposeKernel(const uchar3* __restrict__ image, uchar3* out, int rows, int cols);
 __global__ void energyKernel(const uchar3* __restrict__ image, float* output, int rows, int cols);
-__global__ void cudaEnergyMap(const unsigned char* __restrict__ energy, unsigned char* energyMap, unsigned char* prevEnergy, int rowSize, int colSize);
-__global__ void cudaEnergyMapLarge(const unsigned char* __restrict__ energy, unsigned char* energyMap, unsigned char* prevEnergy, int rowSize, int colSize, int current);
-__global__ void cudaReduction(const unsigned char* __restrict__ row, float* mins, int* minsIndices, int size, int blockSize, int next);
-__global__ void cudaRemoveSeam(uchar3* image, int* seam, int rowSize, int colSize);
+__global__ void energyMapKernel_1B(const float* __restrict__ energy, float* energyMap, float* prevEnergy, int rows, int cols);
+__global__ void energyMapKernel_nB(const float* __restrict__ energy, float* energyMap, float* prevEnergy, int rows, int cols, int current);
+__global__ void minReductionKernel(const float* __restrict__ row, float* mins, int* minsIndices, int size);
+__global__ void removeSeamKernel(const uchar3* __restrict__ image, uchar3* out, int* seam, int rows, int cols);
 
 /**************************************************************
 * Wrappers and utilities.
@@ -90,97 +78,27 @@ int nextPowerof2(int n) {
     return n;
 }
 
-
-void getEnergyMap(GpuMat& d_energy, GpuMat& d_energyMap, int rowSize, int colSize) {
-
-    // Start from first row. Copy first row of energyMap to be used in device
-    GpuMat d_prevEnergy(1, colSize, CV_32F, float(0));
-    d_energy.row(0).copyTo(d_prevEnergy.row(0));
-
-    int blockSize = min(colSize, MAX_THREADS);
-    int gridSize = ((colSize - 1) / MAX_THREADS) + 1;
-
-    if (gridSize == 1) {
-        cudaEnergyMap <<<gridSize, blockSize >>> (d_energy.ptr<unsigned char>(), d_energyMap.ptr<unsigned char>(), d_prevEnergy.ptr<unsigned char>(), rowSize, colSize);
-    }
-    else {
-        for (int i = 1; i < rowSize; i++) {
-            cudaEnergyMapLarge <<<gridSize, blockSize >>> (d_energy.ptr<unsigned char>(), d_energyMap.ptr<unsigned char>(), d_prevEnergy.ptr<unsigned char>(), rowSize, colSize, i);
-        }
-    }
-
-    d_prevEnergy.release();
-}
-
-
-int getMinCumulativeEnergy(GpuMat& d_energyMap, int rowSize, int colSize) {
-    // Require block size to be a multiple of 2 for parallel reduction
-    // Sequential addressing ensures bank conflict free
-    int blockSize;
-    int gridSize;
-    int lastSize;
-    int sharedSize;
-
-    blockSize = min(nextPowerof2(colSize / 2), MAX_THREADS);
-    gridSize = (nextPowerof2(colSize / 2) - 1) / MAX_THREADS + 1;
-    sharedSize = blockSize * 2 * (sizeof(float) + sizeof(int));
-    lastSize = colSize;
-    // Copy last row of energyMap to be used in device
-    GpuMat d_last(1, colSize, CV_32F, float(0));
-    d_energyMap.row(rowSize - 1).copyTo(d_last.row(0));
-
-    // Allocate memory for host and device variables
-    float* h_mins = new float[gridSize];
-    int* h_minIndices = new int[gridSize];
-    float* d_mins;
-    int* d_minIndices;
-
-    HANDLE_ERROR( cudaMalloc(&d_mins, gridSize * sizeof(float)) );
-    HANDLE_ERROR( cudaMalloc(&d_minIndices, gridSize * sizeof(int)) );
-
-    cudaReduction <<<gridSize, blockSize, sharedSize >>>(d_last.ptr<unsigned char>(), d_mins, d_minIndices, lastSize, blockSize, blockSize * gridSize);
-
-    HANDLE_ERROR( cudaMemcpy(h_mins, d_mins, gridSize * sizeof(float), cudaMemcpyDeviceToHost) );
-    HANDLE_ERROR( cudaMemcpy(h_minIndices, d_minIndices, gridSize * sizeof(int), cudaMemcpyDeviceToHost) );
-
-    // Compare mins of different blocks
-    pair<float, int> min = {h_mins[0], h_minIndices[0]};
-    for (int i = 1; i < gridSize; i++) {
-        if (min.first > h_mins[i]) {
-            min.first = h_mins[i];
-            min.second = h_minIndices[i];
-        }
-    }
-    free(h_mins);
-    free(h_minIndices);
-    
-    d_last.release();
-    HANDLE_ERROR( cudaFree(d_mins) );
-    HANDLE_ERROR( cudaFree(d_minIndices) );
-    return min.second;
-}
-
 namespace CUDA{
     void warmUpGPU() {
-        warm_up_gpu << <1, 1024 >> > ();
+        warmUpKernel << <1, 1024 >> > ();
     }
 
     void trans(GpuMat& d_image){
-        int rowSize = d_image.rows;
-        int colSize = d_image.cols;
+        int rows = d_image.rows;
+        int cols = d_image.cols;
 
         dim3 blockDim(32, 32);
         dim3 gridDim((d_image.cols + blockDim.x - 1) / blockDim.x, (d_image.rows + blockDim.y - 1) / blockDim.y);
 
-        GpuMat d_out(colSize, rowSize, d_image.type());
+        GpuMat d_out(cols, rows, d_image.type());
 
-        transposeKernel<<<gridDim, blockDim>>>(d_image.ptr<uchar3>(), d_out.ptr<uchar3>(), rowSize, colSize);
+        transposeKernel<<<gridDim, blockDim>>>(d_image.ptr<uchar3>(), d_out.ptr<uchar3>(), rows, cols);
 
         d_image.release();
         d_image = d_out;
     }
 
-    GpuMat createEnergyImg(GpuMat &d_image) {
+    GpuMat calculateEnergyImg(GpuMat &d_image) {
         auto start = chrono::high_resolution_clock::now();
         int rows = d_image.rows, cols = d_image.cols;
 
@@ -200,19 +118,21 @@ namespace CUDA{
     void removeSeam(GpuMat& d_image, vector<int> h_seam) {
         int* d_seam;
 
-        int rowSize = d_image.rows;
-        int colSize = d_image.cols;
+        int rows = d_image.rows;
+        int cols = d_image.cols;
+
+        GpuMat d_out(rows, cols-1, CV_8UC3);
 
         dim3 blockDim(32, 32);
-        dim3 gridDim((colSize + blockDim.x - 1) / blockDim.x, (rowSize + blockDim.y - 1) / blockDim.y);
+        dim3 gridDim((cols + blockDim.x - 1) / blockDim.x, (rows + blockDim.y - 1) / blockDim.y);
         auto startRemove = chrono::high_resolution_clock::now();
 
         HANDLE_ERROR( cudaMalloc(&d_seam, h_seam.size() * sizeof(int)) );
-        HANDLE_ERROR( cudaMemcpy(d_seam, &h_seam[0], h_seam.size() * sizeof(int), cudaMemcpyHostToDevice) );
+        HANDLE_ERROR( cudaMemcpy(d_seam, h_seam.data(), h_seam.size() * sizeof(int), cudaMemcpyHostToDevice) );
 
-        cudaRemoveSeam << <gridDim, blockDim >> > (d_image.ptr<uchar3>(), d_seam, rowSize, colSize);
+        removeSeamKernel << <gridDim, blockDim >> > (d_image.ptr<uchar3>(), d_out.ptr<uchar3>(), d_seam, rows, cols);
 
-        d_image = d_image.colRange(0, d_image.cols - 1).clone();
+        d_image = d_out;
 
         HANDLE_ERROR( cudaFree(d_seam) );
 
@@ -221,10 +141,77 @@ namespace CUDA{
     }
 }
 
+
+void getEnergyMap(GpuMat& d_energy, GpuMat& d_energyMap, int rows, int cols) {
+
+    // Start from first row. Copy first row of energyMap to be used in device
+    GpuMat d_prevEnergy(1, cols, CV_32F, float(0));
+    d_energy.row(0).copyTo(d_prevEnergy.row(0));
+
+    int blockSize = min(cols, MAX_THREADS);
+    int gridSize = ((cols - 1) / MAX_THREADS) + 1;
+
+    if (gridSize == 1) {
+        energyMapKernel_1B <<<gridSize, blockSize >>> (d_energy.ptr<float>(), d_energyMap.ptr<float>(), d_prevEnergy.ptr<float>(), rows, cols);
+    }
+    else {
+        for (int i = 1; i < rows; i++) {
+            energyMapKernel_nB <<<gridSize, blockSize >>> (d_energy.ptr<float>(), d_energyMap.ptr<float>(), d_prevEnergy.ptr<float>(), rows, cols, i);
+        }
+    }
+
+    d_prevEnergy.release();
+}
+
+
+int getMinCumulativeEnergy(GpuMat& d_energyMap) {
+    // Require block size to be a multiple of 2 for parallel reduction
+    // Sequential addressing ensures bank conflict free
+    int rows = d_energyMap.rows, cols = d_energyMap.cols;
+    int blockSize = min(nextPowerof2(cols / 2), MAX_THREADS);
+    int gridSize = (nextPowerof2(cols / 2) - 1) / MAX_THREADS + 1;
+    int sharedMemSize = blockSize * 2 * (sizeof(float) + sizeof(int));
+
+    // Copy last row of energyMap to be used in device
+    GpuMat d_last(1, cols, CV_32F, float(0));
+    d_energyMap.row(rows - 1).copyTo(d_last.row(0));
+
+    // Allocate memory for host and device variables
+    float* h_minValues = new float[gridSize];
+    int* h_minIndices = new int[gridSize];
+    float* d_minValues;
+    int* d_minIndices;
+
+    HANDLE_ERROR( cudaMalloc(&d_minValues, gridSize * sizeof(float)) );
+    HANDLE_ERROR( cudaMalloc(&d_minIndices, gridSize * sizeof(int)) );
+
+    minReductionKernel <<<gridSize, blockSize, sharedMemSize >>>(d_last.ptr<float>(), d_minValues, d_minIndices, cols);
+
+    HANDLE_ERROR( cudaMemcpy(h_minValues, d_minValues, gridSize * sizeof(float), cudaMemcpyDeviceToHost) );
+    HANDLE_ERROR( cudaMemcpy(h_minIndices, d_minIndices, gridSize * sizeof(int), cudaMemcpyDeviceToHost) );
+
+    // Compare mins of different blocks
+    pair<float, int> min = {h_minValues[0], h_minIndices[0]};
+    for (int i = 1; i < gridSize; i++) {
+        if (min.first > h_minValues[i]) {
+            min.first = h_minValues[i];
+            min.second = h_minIndices[i];
+        }
+    }
+    free(h_minValues);
+    free(h_minIndices);
+    
+    d_last.release();
+    HANDLE_ERROR( cudaFree(d_minValues) );
+    HANDLE_ERROR( cudaFree(d_minIndices) );
+    return min.second;
+}
+
+
 /**************************************************************
 * Kernel functions
 **************************************************************/
-__global__ void warm_up_gpu() {
+__global__ void warmUpKernel() {
     unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
     float ia, ib;
     ia = ib = 0.0f;
@@ -241,8 +228,12 @@ __global__ void energyKernel(const uchar3* __restrict__ image, float* output, in
         ty = threadIdx.y + blockIdx.y * blockDim.y,
         here = ty*cols+tx;
     if (tx<cols && ty<rows){
-        float   dy = bgr2gray(image[(ty+1>=rows)?here:(cols+here)]) - bgr2gray(image[(ty==0)?here:(here-cols)]),
-                dx = bgr2gray(image[(tx+1>=cols)?here:(here+1)]) - bgr2gray(image[(ty==0)?here:(here-1)]);
+        uchar3  left = image[(ty==0)?here:(here-1)],
+                right = image[(tx+1>=cols)?here:(here+1)],
+                down = image[(ty+1>=rows)?here:(cols+here)],
+                up = image[(ty==0)?here:(here-cols)];
+        float   dy = bgr2gray(down) - bgr2gray(up),
+                dx = bgr2gray(right) - bgr2gray(left);
         output[here] = (abs(dy)+abs(dx)) / 510.;
     }
 }
@@ -264,106 +255,103 @@ __global__ void transposeKernel(const uchar3* __restrict__ image, uchar3* out, i
 }
 
 
-__global__ void cudaEnergyMap(const unsigned char* __restrict__ energy, unsigned char* energyMap, unsigned char* prevEnergy, int rowSize, int colSize) {
+__global__ void energyMapKernel_1B(const float* __restrict__ energy, float* energyMap, float* prevEnergy, int rows, int cols) {
     int idx;
-    float topCenter, topLeft, topRight, minEnergy, cumEnergy;
+    float upper, upperLeft, upperRight, minEnergy, cumEnergy;
 
     idx = blockIdx.x * MAX_THREADS + threadIdx.x;
 
-    for (int current = 1; current < rowSize; current++) {
-        if (idx < colSize) {
+    for (int current = 1; current < rows; current++) {
+        if (idx < cols) {
             // Find min value of prev row neighbors and add to the current idx's cumEnergy
-            topCenter = ((float*)prevEnergy)[idx];
-            topLeft = (idx > 0) ? ((float*)prevEnergy)[idx - 1] : ((float*)prevEnergy)[0];
-            topRight = (idx < colSize - 1) ? ((float*)prevEnergy)[idx + 1] : ((float*)prevEnergy)[colSize - 1];
-            minEnergy = min(topCenter, min(topLeft, topRight));
-            cumEnergy = minEnergy + ((float*)energy)[current * colSize + idx];
+            upper = prevEnergy[idx];
+            upperLeft = (idx > 0) ? prevEnergy[idx - 1] : prevEnergy[0];
+            upperRight = (idx < cols - 1) ? prevEnergy[idx + 1] : prevEnergy[cols - 1];
+            minEnergy = min(upper, min(upperLeft, upperRight));
+            cumEnergy = minEnergy + energy[current * cols + idx];
         }
         __syncthreads();
-        if (idx < colSize) {
+        if (idx < cols) {
             //Update cumEnergy in map and prevRow array
-            ((float*)prevEnergy)[idx] = cumEnergy;
-            ((float*)energyMap)[current * colSize + idx] = cumEnergy;
+            prevEnergy[idx] = cumEnergy;
+            energyMap[current * cols + idx] = cumEnergy;
         }
         __syncthreads();
     }
 
 }
 
-__global__ void cudaEnergyMapLarge(const unsigned char* __restrict__ energy, unsigned char* energyMap, unsigned char* prevEnergy, int rowSize, int colSize, int current) {
+__global__ void energyMapKernel_nB(const float* __restrict__ energy, float* energyMap, float* prevEnergy, int rows, int cols, int current) {
     int idx;
-    float topCenter, topLeft, topRight, minEnergy, cumEnergy;
+    float upper, upperLeft, upperRight, minEnergy, cumEnergy;
 
     idx = blockIdx.x * MAX_THREADS + threadIdx.x;
 
-    if (idx >= colSize) {
+    if (idx >= cols) {
         return;
     }
     // Find min value of prev row neighbors and add to the current idx's cumEnergy
-    topCenter = ((float*)prevEnergy)[idx];
-    topLeft = (idx > 0) ? ((float*)prevEnergy)[idx - 1] : ((float*)prevEnergy)[0];
-    topRight = (idx < colSize - 1) ? ((float*)prevEnergy)[idx + 1] : ((float*)prevEnergy)[colSize - 1];
-    minEnergy = min(topCenter, min(topLeft, topRight));
-    cumEnergy = minEnergy + ((float*)energy)[current * colSize + idx];
+    upper = prevEnergy[idx];
+    upperLeft = (idx > 0) ? prevEnergy[idx - 1] : prevEnergy[0];
+    upperRight = (idx < cols - 1) ? prevEnergy[idx + 1] : prevEnergy[cols - 1];
+    minEnergy = min(upper, min(upperLeft, upperRight));
+    cumEnergy = minEnergy + energy[current * cols + idx];
     __syncthreads();
     //Update cumEnergy in map and prevRow array
-    ((float*)prevEnergy)[idx] = cumEnergy;
-    ((float*)energyMap)[current * colSize + idx] = cumEnergy;
+    prevEnergy[idx] = cumEnergy;
+    energyMap[current * cols + idx] = cumEnergy;
 
 
 }
 
-__global__ void cudaReduction(const unsigned char* __restrict__ last, float* mins, int* minsIndices, int size, int blockSize, int next) {
+__global__ void minReductionKernel(const float* __restrict__ row, float* mins, int* minsIndices, int size) {
     // Global index
-    int idx = blockIdx.x * blockSize + threadIdx.x;
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int next = blockDim.x * gridDim.x;
     // Initialize shared memory arrays
     extern __shared__ unsigned char sharedMemory[];
-    float* sharedMins = (float*)sharedMemory;
-    int* sharedMinIndices = (int*)(&(sharedMins[blockSize * 2]));
+    float* s_minValues = (float*)sharedMemory;
+    int* s_minIndices = (int*)(s_minValues + blockDim.x * 2);
     
     // Since shared memory is shared in a block, the local idx is used while storing the value of the global idx cumEnergy
-    sharedMins[threadIdx.x] = (idx < size) ? ((float*)last)[idx] : DBL_MAX;
-    sharedMins[threadIdx.x + blockSize] = (idx + next < size) ? ((float*)last)[idx + next] : DBL_MAX;
-    sharedMinIndices[threadIdx.x] = (idx < size) ? idx : INT_MAX;
-    sharedMinIndices[threadIdx.x + blockSize] = (idx + next < size) ? idx + next : INT_MAX;
+    s_minValues[threadIdx.x] = (idx < size) ? row[idx] : DBL_MAX;
+    s_minValues[threadIdx.x + blockDim.x] = (idx + next < size) ? row[idx + next] : DBL_MAX;
+    s_minIndices[threadIdx.x] = (idx < size) ? idx : INT_MAX;
+    s_minIndices[threadIdx.x + blockDim.x] = (idx + next < size) ? idx + next : INT_MAX;
 
     __syncthreads();
     
     // Parallel reduction to get the min of the block
-    for (int i = blockSize; i > 0; i >>= 1) {
-        if (threadIdx.x < i) {
-            if (sharedMins[threadIdx.x] > sharedMins[threadIdx.x + i]) {
-                sharedMins[threadIdx.x] = sharedMins[threadIdx.x + i];
-                sharedMinIndices[threadIdx.x] = sharedMinIndices[threadIdx.x + i];
+    for (int s = blockDim.x; s > 0; s >>= 1) {
+        if (threadIdx.x < s) {
+            if (s_minValues[threadIdx.x] > s_minValues[threadIdx.x + s]) {
+                s_minValues[threadIdx.x] = s_minValues[threadIdx.x + s];
+                s_minIndices[threadIdx.x] = s_minIndices[threadIdx.x + s];
             }
         }
         __syncthreads();
     }
     // local idx 0 has the min of the block
     if (threadIdx.x == 0) {
-        mins[blockIdx.x] = sharedMins[0];
-        minsIndices[blockIdx.x] = sharedMinIndices[0];
+        mins[blockIdx.x] = s_minValues[0];
+        minsIndices[blockIdx.x] = s_minIndices[0];
     }
 }
 
-__global__ void cudaRemoveSeam (uchar3 * image, int* seam, int rowSize, int colSize) {
+__global__ void removeSeamKernel (const uchar3* __restrict__ image, uchar3* out, int* seam, int rows, int cols) {
     int col = blockIdx.x * blockDim.x + threadIdx.x;
     int row = blockIdx.y * blockDim.y + threadIdx.y;
     // Location of colored pixel in input
-    int tidImage = row * colSize + col;
-    uchar3 temp;
+    int from = row * cols + col,
+        to = row * (cols - 1) + col;
+    uchar3 pixel;
 
-    if (col < colSize && row < rowSize) {
-        if (col >= seam[row] && col != colSize - 1) {
-            temp = image[tidImage+1];
-        }
-        else {
-            temp = image[tidImage];
-        }
+    if (col < cols && row < rows) {
+        pixel = (col>=seam[row] && col!=cols-1)? image[from+1]: image[from];
     }
     
     __syncthreads();
-    if (col < colSize && row < rowSize) {
-        image[tidImage] = temp;
+    if (col < cols - 1 && row < rows) {
+        out[to] = pixel;
     }
 }

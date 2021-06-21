@@ -3,10 +3,9 @@
 
 #include "project.h"
 
-void getEnergyMap(cv::cuda::GpuMat& d_energy, cv::cuda::GpuMat& d_energyMap, int rowSize, int colSize);
-int getMinCumulativeEnergy(cv::cuda::GpuMat& d_energyMap, int rowSize, int colSize);
+void getEnergyMap(cv::cuda::GpuMat& d_energy, cv::cuda::GpuMat& d_energyMap, int rows, int cols);
+int getMinCumulativeEnergy(cv::cuda::GpuMat& d_energyMap);
 void removeSeam(cv::cuda::GpuMat& d_image, std::vector<int> h_seam);
-void wrapper(cv::Mat& image, int& reduceWidth, int& reduceHeight);
 
 class MyAllocator : public cv::cuda::GpuMat::Allocator
 {

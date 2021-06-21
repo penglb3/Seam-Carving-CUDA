@@ -74,10 +74,10 @@ int main(int argc, char** argv)
     cout << "Input dimension " << imageSize.first << " x " << imageSize.second << endl;
 
     // Choose the mode: default = CUDA
-    void (*wrapper)(Mat&, int&, int&) = CUDA::wrapper;
+    void (*seamCarve)(Mat&, int&, int&) = CUDA::seamCarve;
 
     if (!parallel){
-        wrapper = CPU::wrapper;
+        seamCarve = CPU::seamCarve;
     }
     else
         CUDA::warmUpGPU();
@@ -86,7 +86,7 @@ int main(int argc, char** argv)
         time_records = new double[reduceWidth + reduceHeight + 3];
         records_idx = -1;
     }
-    wrapper(image, reduceWidth, reduceHeight);
+    seamCarve(image, reduceWidth, reduceHeight);
     if (visualize == 1)
     {
         visualize = 2;
@@ -100,9 +100,9 @@ int main(int argc, char** argv)
         Mat temp_image = imread(imageName, IMREAD_COLOR);
         fH = fW = max(imageSize.first, imageSize.second);
         out_capture = VideoWriter("video.avi", VideoWriter::fourcc('M', 'J','P','G'), fps, Size(fW, fH));
-        wrapper = CUDA::wrapper;
-        wrapper(temp_image, reduceWidth, reduceHeight);
-        wrapper = CPU::wrapper;
+        seamCarve = CUDA::seamCarve;
+        seamCarve(temp_image, reduceWidth, reduceHeight);
+        seamCarve = CPU::seamCarve;
         temp_image.release();
         sobelEnergyTime = temp_sobelEnergyTime;
         cumEnergyTime = temp_cumEnergyTime;

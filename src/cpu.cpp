@@ -31,7 +31,7 @@ namespace CPU{
         transpose(image, image);
     }
 
-    Mat createEnergyImg(Mat &image) {
+    Mat calculateEnergyImg(Mat &image) {
         auto start = chrono::high_resolution_clock::now();
         Mat grayscale, grad, energy;
         Mat grad_x, grad_y;
@@ -40,10 +40,8 @@ namespace CPU{
         int scale = 1;
         int delta = 0;
 
-        // Convert image to grayscale
         cvtColor(image, grayscale, COLOR_BGR2GRAY);
 
-        // Perform sobel operator to get image gradient
         Sobel(grayscale, grad_x, ddepth, 1, 0, 3, scale, delta, BORDER_DEFAULT);
         Sobel(grayscale, grad_y, ddepth, 0, 1, 3, scale, delta, BORDER_DEFAULT);
 
@@ -52,7 +50,6 @@ namespace CPU{
 
         addWeighted(abs_grad_x, 0.5, abs_grad_y, 0.5, 0, grad);
 
-        // Convert gradient to double
         grad.convertTo(energy, CV_64F, 1.0 / 255.0);
 
         auto end = chrono::high_resolution_clock::now();
@@ -61,27 +58,23 @@ namespace CPU{
         return energy;
     }
 
-    Mat createEnergyMap(Mat& energy) {
+    Mat calculateEnergyMap(Mat& energy) {
         auto start = chrono::high_resolution_clock::now();
-        double topCenter, topLeft, topRight;
-        int rowSize = energy.rows;
-        int colSize = energy.cols;
+        double upper, upperLeft, upperRight;
+        int rows = energy.rows;
+        int cols = energy.cols;
 
-        // Initialize energy map
-        Mat energyMap = Mat(rowSize, colSize, CV_64F, double(0));
+        Mat energyMap = Mat(rows, cols, CV_64F, double(0));
 
-        // Vertical Seam
-        // The first row of the map should be the same as the first row of energy
         energy.row(0).copyTo(energyMap.row(0));
 
-        for (int row = 1; row < rowSize; row++) {
-            for (int col = 0; col < colSize; col++) {
-                topCenter = energyMap.at<double>(row - 1, col);
-                topLeft = energyMap.at<double>(row - 1, max(col - 1, 0));
-                topRight = energyMap.at<double>(row - 1, min(col + 1, colSize - 1));
+        for (int row = 1; row < rows; row++) {
+            for (int col = 0; col < cols; col++) {
+                upper = energyMap.at<double>(row - 1, col);
+                upperLeft = energyMap.at<double>(row - 1, max(col - 1, 0));
+                upperRight = energyMap.at<double>(row - 1, min(col + 1, cols - 1));
 
-                // add energy at pixel with smallest of previous row neighbor's cumulative energy
-                energyMap.at<double>(row, col) = energy.at<double>(row, col) + min(topCenter, min(topLeft, topRight));
+                energyMap.at<double>(row, col) = energy.at<double>(row, col) + min(upper, min(upperLeft, upperRight));
             }
         }
 
@@ -93,38 +86,34 @@ namespace CPU{
 
     vector<int> findSeam(Mat& energyMap) {
         auto start = chrono::high_resolution_clock::now();
-        int rowSize = energyMap.rows;
-        int colSize = energyMap.cols;
+        int rows = energyMap.rows;
+        int cols = energyMap.cols;
         vector<int> seam;
-        double topCenter, topLeft, topRight;
+        float upper, upper_left, upper_right;
         double minVal;
         Point minLoc;
-        
-        // Vertical seam, reduces width
-        seam.resize(rowSize);
-        // Get location of min cumulative energy
-        minMaxLoc(energyMap.row(rowSize - 1), &minVal, NULL, &minLoc, NULL);
-        int curCol = minLoc.x;
-        seam[rowSize - 1] = curCol;
 
-        // Look at top neighbors to find next minimum cumulative energy
-        for (int row = rowSize - 1; row > 0; row--) {
-            topCenter = energyMap.at<double>(row - 1, curCol);
-            topLeft = energyMap.at<double>(row - 1, max(curCol - 1, 0));
-            topRight = energyMap.at<double>(row - 1, min(curCol + 1, colSize - 1));
+        seam.resize(rows);
+
+        minMaxLoc(energyMap.row(rows - 1), &minVal, NULL, &minLoc, NULL);
+        int current = minLoc.x;
+        seam[rows - 1] = current;
+
+        for (int row = rows - 2; row >= 0; row--) {
+            upper = energyMap.at<float>(row, current);
+            upper_left = energyMap.at<float>(row, max(current - 1, 0));
+            upper_right = energyMap.at<float>(row, min(current + 1, cols - 1));
 
             // find next col idx
-            if (min(topLeft, topCenter) > topRight) {
-                // topRight smallest
-                curCol += 1;
+            if (min(upper_left, upper) > upper_right) {
+                // upper_right smallest
+                current += 1;
             }
-            else if (min(topRight, topCenter) > topLeft) {
-                // topLeft smallest
-                curCol -= 1;
+            else if (min(upper_right, upper) > upper_left) {
+                // upper_left smallest
+                current -= 1;
             }
-            // if topCenter smallest, curCol remain;
-            // update seam
-            seam[row - 1] = curCol;
+            seam[row] = current;
         }
 
         auto end = chrono::high_resolution_clock::now();
@@ -134,37 +123,33 @@ namespace CPU{
 
     void removeSeam(Mat& image, vector<int> seam) {
         auto start = chrono::high_resolution_clock::now();
-        // spare 1x1x3 to maintain matrix size
         Mat spare(1, 1, CV_8UC3, Vec3b(0, 0, 0));
-
-        // Vertical seam, reduces width
-        Mat tempRow(image.cols, 1, CV_8UC3);
+        Mat temp(image.cols, 1, CV_8UC3);
         for (int i = 0; i < image.rows; i++) {
-            tempRow.setTo(0);
+            temp.setTo(0);
             Mat beforeIdx = image.rowRange(i, i + 1).colRange(0, seam[i]);
             Mat afterIdx = image.rowRange(i, i + 1).colRange(seam[i] + 1, image.cols);
 
             if (beforeIdx.empty()) {
-                hconcat(afterIdx, spare, tempRow);
+                hconcat(afterIdx, spare, temp);
             }
             else if (afterIdx.empty()) {
-                hconcat(beforeIdx, spare, tempRow);
+                hconcat(beforeIdx, spare, temp);
             }
             else {
-                hconcat(beforeIdx, afterIdx, tempRow);
-                hconcat(tempRow, spare, tempRow);
+                hconcat(beforeIdx, afterIdx, temp);
+                hconcat(temp, spare, temp);
             }
-            tempRow.copyTo(image.row(i));
+            temp.copyTo(image.row(i));
         }
         image = image.colRange(0, image.cols - 1);
         
-        //imshow("after cut", image);
         auto end = chrono::high_resolution_clock::now();
         removeSeamTime += chrono::duration_cast<chrono::microseconds>(end - start).count() / 1e3;
         return;
     }
 
-    void wrapper(Mat& image, int& reduceWidth, int& reduceHeight)
+    void seamCarve(Mat& image, int& reduceWidth, int& reduceHeight)
     {
         Mat energy, energyMap, h_temp;
         vector<int> seam;
@@ -177,8 +162,8 @@ namespace CPU{
         }
         // Vertical seam
         for (int i = 0; i < reduceWidth; i++) {
-            energy = createEnergyImg(image);
-            energy = createEnergyMap(energy);
+            energy = calculateEnergyImg(image);
+            energy = calculateEnergyMap(energy);
             seam = findSeam(energy);
             removeSeam(image, seam);
             if (visualize == 1)
@@ -198,7 +183,7 @@ namespace CPU{
         }
         // Horizontal seam
         for (int j = 0; j < reduceHeight; j++) {
-            energy = createEnergyImg(image);
+            energy = calculateEnergyImg(image);
             seam = findSeam(energy);
             removeSeam(image, seam);
             if (visualize == 1)

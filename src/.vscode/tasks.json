@@ -8,7 +8,7 @@
             "label": "C/C++: NVCC Build",
             "command": "nvcc",
             "args": [
-                "main.cpp","sequential.cpp","parallel.cpp","kernel.cu",
+                "main.cpp","cpu.cpp","cuda.cpp","kernel.cu",
                 "-g", "-G",
                 "-I", "../include",
                 "-L", "../lib",
