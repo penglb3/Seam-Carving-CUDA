@@ -102,17 +102,17 @@ namespace CUDA{
         auto start = chrono::high_resolution_clock::now();
         int rows = d_image.rows, cols = d_image.cols;
 
-        GpuMat d_output(rows, cols, CV_32F, 0.);
+        GpuMat d_energy(rows, cols, CV_32F, 0.);
 
         dim3 blockDim(32, 32);
         dim3 gridDim((d_image.cols + blockDim.x - 1) / blockDim.x, (d_image.rows + blockDim.y - 1) / blockDim.y);
 
-        energyKernel <<< gridDim, blockDim >>> (d_image.ptr<uchar3>(), d_output.ptr<float>(), rows, cols);
+        energyKernel <<< gridDim, blockDim >>> (d_image.ptr<uchar3>(), d_energy.ptr<float>(), rows, cols);
 
         auto end = chrono::high_resolution_clock::now();
         sobelEnergyTime += chrono::duration_cast<chrono::microseconds>(end - start).count() / 1e3;
 
-        return d_output;
+        return d_energy;
     }
 
     void removeSeam(GpuMat& d_image, vector<int> h_seam) {
