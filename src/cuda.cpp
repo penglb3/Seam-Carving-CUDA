@@ -89,28 +89,23 @@ namespace CUDA{
         return seam;
     }
 
-    void seamCarve(Mat& image, int& reduceWidth, int& reduceHeight)
-    {
+    void seamCarve(Mat& image, int& reduceWidth, int& reduceHeight) {
         GpuMat::setDefaultAllocator(&myAllocator);
         GpuMat d_image, d_energy, d_energyMap;
         Mat h_temp;
-        // Mat energy, energyMap;
         vector<int> seam;
         auto start = std::chrono::high_resolution_clock::now();
         std::chrono::steady_clock::time_point record;
         // Vertical seam
         d_image.upload(image);
-        if (visualize == 1)
-        {
+        if (visualize == 1) {
             record = std::chrono::high_resolution_clock::now();
             time_records[++records_idx] = std::chrono::duration_cast<std::chrono::microseconds>(record - start).count() / 1e6;
         }
-        else if (visualize == 2)
-        {
+        else if (visualize == 2) {
             cv::copyMakeBorder(h_temp, h_temp, 0, fH, 0, fW, h_temp.type());
             double record = time_records[++records_idx];
-            while (cur_frame * spf < record)
-            {
+            while (cur_frame * spf < record) {
                 out_capture << h_temp;
                 ++cur_frame;
             }
@@ -121,20 +116,17 @@ namespace CUDA{
         for (int i = 0; i < reduceWidth; i++) {
             d_energy = calculateEnergyImg(d_image);
             d_energyMap = calculateEnergyMap(d_energy);
-            // d_energy.release();
+            d_energy.release();
             seam = findSeam(d_energyMap);
-           //  d_energyMap.release();
+            d_energyMap.release();
             removeSeam(d_image, seam);
-            if (visualize == 1)
-            {
+            if (visualize == 1) {
                 record = std::chrono::high_resolution_clock::now();
                 time_records[++records_idx] = std::chrono::duration_cast<std::chrono::microseconds>(record - start).count() / 1e6;
             }
-            else if (visualize == 2)
-            {
+            else if (visualize == 2) {
                 double record = time_records[++records_idx];
-                while (cur_frame * spf < record)
-                {
+                while (cur_frame * spf < record) {
                     out_capture << h_temp;
                     ++cur_frame;
                 }
@@ -147,16 +139,13 @@ namespace CUDA{
         trans(d_image);
         auto endTranspose = std::chrono::high_resolution_clock::now();
         transposeTime += std::chrono::duration_cast<std::chrono::microseconds>(endTranspose - startTranspose).count() / 1e3;
-        if (visualize == 1)
-        {
+        if (visualize == 1) {
             record = std::chrono::high_resolution_clock::now();
             time_records[++records_idx] = std::chrono::duration_cast<std::chrono::microseconds>(record - start).count() / 1e6;
         }
-        else if (visualize == 2)
-        {
+        else if (visualize == 2) {
             double record = time_records[++records_idx];
-            while (cur_frame * spf < record)
-            {
+            while (cur_frame * spf < record) {
                 out_capture << h_temp;
                 ++cur_frame;
             }
@@ -172,16 +161,13 @@ namespace CUDA{
             seam = findSeam(d_energyMap);
             d_energyMap.release();
             removeSeam(d_image, seam);
-            if (visualize == 1)
-            {
+            if (visualize == 1) {
                 record = std::chrono::high_resolution_clock::now();
                 time_records[++records_idx] = std::chrono::duration_cast<std::chrono::microseconds>(record - start).count() / 1e6;
             }
-            else if (visualize == 2)
-            {
+            else if (visualize == 2) {
                 double record = time_records[++records_idx];
-                while (cur_frame * spf < record)
-                {
+                while (cur_frame * spf < record) {
                     out_capture << h_temp;
                     ++cur_frame;
                 }
@@ -198,15 +184,12 @@ namespace CUDA{
         d_image.release();
         auto end = std::chrono::high_resolution_clock::now();
         totalTime = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() / 1e3;
-        if (visualize == 1)
-        {
+        if (visualize == 1) {
             time_records[++records_idx] = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() / 1e6;
         }
-        else if (visualize == 2)
-        {
+        else if (visualize == 2) {
             double record = time_records[++records_idx];
-            while (cur_frame * spf < record)
-            {
+            while (cur_frame * spf < record) {
                 out_capture << h_temp;
                 ++cur_frame;
             }

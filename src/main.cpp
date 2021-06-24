@@ -81,14 +81,12 @@ int main(int argc, char** argv)
     }
     else
         CUDA::warmUpGPU();
-    if (visualize == 1)
-    {
+    if (visualize == 1) {
         time_records = new double[reduceWidth + reduceHeight + 3];
         records_idx = -1;
     }
     seamCarve(image, reduceWidth, reduceHeight);
-    if (visualize == 1)
-    {
+    if (visualize == 1) {
         visualize = 2;
         records_idx = -1;
         float temp_sobelEnergyTime = sobelEnergyTime;

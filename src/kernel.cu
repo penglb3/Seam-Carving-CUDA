@@ -36,8 +36,7 @@ static void HandleError( cudaError_t err, const char *file, int line ) {
 /**************************************************************
 * Definitions of the allocator without alignment.
 **************************************************************/
-bool MyAllocator::allocate(GpuMat* mat, int rows, int cols, size_t elemSize)
-{
+bool MyAllocator::allocate(GpuMat* mat, int rows, int cols, size_t elemSize) {
     // Single row or single column must be continuous
     HANDLE_ERROR( cudaMalloc(&mat->data, elemSize * cols * rows) );
     mat->step = elemSize * cols;
@@ -47,8 +46,7 @@ bool MyAllocator::allocate(GpuMat* mat, int rows, int cols, size_t elemSize)
     return true;
 }
 
-void MyAllocator::free(GpuMat* mat)
-{
+void MyAllocator::free(GpuMat* mat) {
     cudaFree(mat->datastart);
     fastFree(mat->refcount);
 }
