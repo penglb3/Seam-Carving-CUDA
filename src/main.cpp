@@ -43,14 +43,14 @@ int main(int argc, char** argv)
     // Get parameters from arguments (if provided)
     char c;
 
-    while((c = getopt(argc, argv, "w:h:i:o:svf:"))!=-1)
+    while((c = getopt(argc, argv, "w:h:i:o:sv:f:"))!=-1)
         switch(c){
             case 'w': width = atoi(optarg);break;		    // output width
             case 'h': height = atoi(optarg);break;		    // output height
             case 'i': imageName = optarg;break;			    // input filename
             case 'o': outputName = optarg;break;		    // output filename
             case 's': parallel = 0;break;				    // use parallel mode?
-            case 'v': visualize = 1;break;				    // visualize?
+            case 'v': visualize = atoi(optarg);break;	    // visualize?
             case 'f': fps=atoi(optarg);spf=1.0/fps;break;   // fps
             default : abort();
         }
@@ -81,13 +81,18 @@ int main(int argc, char** argv)
     }
     else
         CUDA::warmUpGPU();
-    if (visualize == 1) {
-        time_records = new double[reduceWidth + reduceHeight + 3];
-        records_idx = -1;
+    switch (visualize) {
+        case 1:
+            fH = fW = max(imageSize.first, imageSize.second);
+            out_capture = VideoWriter("video.avi", VideoWriter::fourcc('M', 'J','P','G'), fps, Size(fW, fH));
+            break;
+        case 2:
+            time_records = new double[reduceWidth + reduceHeight + 3];
+            records_idx = -1;
     }
     seamCarve(image, reduceWidth, reduceHeight);
-    if (visualize == 1) {
-        visualize = 2;
+    if (visualize == 2) {
+        visualize = 3;
         records_idx = -1;
         float temp_sobelEnergyTime = sobelEnergyTime;
         float temp_cumEnergyTime = cumEnergyTime;

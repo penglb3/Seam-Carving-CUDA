@@ -154,7 +154,7 @@ namespace CPU{
         vector<int> seam;
         auto start = std::chrono::high_resolution_clock::now();
         std::chrono::steady_clock::time_point record;
-        if (visualize == 1) {
+        if (visualize == 2) {
             record = std::chrono::high_resolution_clock::now();
             time_records[++records_idx] = std::chrono::duration_cast<std::chrono::microseconds>(record - start).count() / 1e6;
         }
@@ -164,7 +164,7 @@ namespace CPU{
             energy = calculateEnergyMap(energy);
             seam = findSeam(energy);
             removeSeam(image, seam);
-            if (visualize == 1) {
+            if (visualize == 2) {
                 record = std::chrono::high_resolution_clock::now();
                 time_records[++records_idx] = std::chrono::duration_cast<std::chrono::microseconds>(record - start).count() / 1e6;
             }
@@ -173,7 +173,7 @@ namespace CPU{
         trans(image);
         auto endTranspose = std::chrono::high_resolution_clock::now();
         transposeTime += std::chrono::duration_cast<std::chrono::microseconds>(endTranspose - startTranspose).count() / 1e3;
-        if (visualize == 1) {
+        if (visualize == 2) {
             record = std::chrono::high_resolution_clock::now();
             time_records[++records_idx] = std::chrono::duration_cast<std::chrono::microseconds>(record - start).count() / 1e6;
         }
@@ -182,7 +182,7 @@ namespace CPU{
             energy = calculateEnergyImg(image);
             seam = findSeam(energy);
             removeSeam(image, seam);
-            if (visualize == 1) {
+            if (visualize == 2) {
                 record = std::chrono::high_resolution_clock::now();
                 time_records[++records_idx] = std::chrono::duration_cast<std::chrono::microseconds>(record - start).count() / 1e6;
             }
@@ -192,7 +192,7 @@ namespace CPU{
         auto end = std::chrono::high_resolution_clock::now();
         transposeTime += std::chrono::duration_cast<std::chrono::microseconds>(end - startTranspose).count() / 1e3;
         totalTime = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() / 1e3;
-        if (visualize == 1) {
+        if (visualize == 2) {
             time_records[++records_idx] = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() / 1e6;
         }
     }
