@@ -99,11 +99,6 @@ namespace CUDA{
         // Vertical seam
         d_image.upload(image);
         switch (visualize) {
-            case 1:
-                cv::copyMakeBorder(h_temp, h_temp, 0, fH, 0, fW, h_temp.type());
-                out_capture << h_temp;
-                h_temp.release();
-                break;
             case 2:
                 record = std::chrono::high_resolution_clock::now();
                 time_records[++records_idx] = std::chrono::duration_cast<std::chrono::microseconds>(record - start).count() / 1e6;
@@ -164,12 +159,6 @@ namespace CUDA{
         auto endTranspose = std::chrono::high_resolution_clock::now();
         transposeTime += std::chrono::duration_cast<std::chrono::microseconds>(endTranspose - startTranspose).count() / 1e3;
         switch (visualize) {
-            case 1:
-                out_capture << h_temp;
-                h_temp.release();
-                d_image.download(h_temp);
-                cv::copyMakeBorder(h_temp, h_temp, 0, fH-h_temp.rows, 0, fW-h_temp.cols, h_temp.type());
-                break;
             case 2:
                 record = std::chrono::high_resolution_clock::now();
                 time_records[++records_idx] = std::chrono::duration_cast<std::chrono::microseconds>(record - start).count() / 1e6;
@@ -198,6 +187,7 @@ namespace CUDA{
                     h_temp.at<Vec3b>(i, seam[i])[1] = 0;
                     h_temp.at<Vec3b>(i, seam[i])[2] = 255;
                 }
+                transpose(h_temp, h_temp);
                 cv::copyMakeBorder(h_temp, h_temp, 0, fH-h_temp.rows, 0, fW-h_temp.cols, h_temp.type());
                 out_capture << h_temp;
                 h_temp.release();
@@ -206,6 +196,7 @@ namespace CUDA{
             switch (visualize) {
                 case 1:
                     d_image.download(h_temp);
+                    transpose(h_temp, h_temp);
                     cv::copyMakeBorder(h_temp, h_temp, 0, fH-h_temp.rows, 0, fW-h_temp.cols, h_temp.type());
                     out_capture << h_temp;
                     h_temp.release();
@@ -234,14 +225,9 @@ namespace CUDA{
         auto end = std::chrono::high_resolution_clock::now();
         totalTime = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() / 1e3;
         switch (visualize) {
-            case 1:
-                d_image.download(h_temp);
-                cv::copyMakeBorder(h_temp, h_temp, 0, fH-h_temp.rows, 0, fW-h_temp.cols, h_temp.type());
-                out_capture << h_temp;
-                h_temp.release();
-                break;
             case 2:
                 time_records[++records_idx] = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() / 1e6;
+                break;
             case 3:
                 double record = time_records[++records_idx];
                 while (cur_frame * spf < record) {

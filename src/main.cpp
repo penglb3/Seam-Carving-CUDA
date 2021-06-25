@@ -83,7 +83,8 @@ int main(int argc, char** argv)
         CUDA::warmUpGPU();
     switch (visualize) {
         case 1:
-            fH = fW = max(imageSize.first, imageSize.second);
+            fH = imageSize.second;
+            fW = imageSize.first;
             out_capture = VideoWriter("video.avi", VideoWriter::fourcc('M', 'J','P','G'), fps, Size(fW, fH));
             break;
         case 2:
